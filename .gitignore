@@ -1,0 +1,32 @@
+
+*/**/__pycache__/*
+
+# Transformation
+# ignore everything
+transformation/*       
+# except cpp and sh files, as well as this file
+!transformation/*.cpp  
+!transformation/*.sh
+!transformation/*.gitignore
+!transformation/*CMakeLists.txt
+
+# Programs
+programs/*/*_dgsi
+programs/*/*_dgsi_noad
+programs/*/*_dgsi.cpp
+programs/*/*_normalized_dgsi.cpp
+programs/*/*_dgo
+programs/*/*_dgo_noad
+programs/*/*_dgo.cpp
+programs/*/*_crisp
+programs/*/*_crisp_ad
+programs/*/*_pgo
+programs/*/*_reinforce
+
+# Publication
+publication/figures
+publication/*.npy
+publication/experiments/gradient_evaluation/results/*
+!publication/experiments/gradient_evaluation/results/.gitkeep
+publication/experiments/optimization/results/*
+!publication/experiments/optimization/results/.gitkeep
