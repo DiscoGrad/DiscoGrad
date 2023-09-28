@@ -1,9 +1,9 @@
 # DiscoGrad
 *Automatically differentiate across conditional control flow of C++ programs.* 
 
-![](docs/banner.mp4)
+Automatic Differentiation (AD) is a popular method to obtain the gradient of computer programs. It is extremely useful when identifying optimal program parameters via gradient descent optimization procedures. Unfortunately, a naive use of AD does not typically provide useful gradients for programs involving parameter-dependent branching control flow, such as if-then-else or for-loop constructs. DiscoGrad provides an automatic transformation of C++ programs to a version that calculates a smoothed gradient *across* those constructs. It supports several backends for smoothing listed below. The tool is functional and supports many C++ constructs, but is still a *research prototype*.
 
-Automatic Differentiation (AD) is a popular method to obtain the gradient of computer programs. This is extremely useful to identify optimal program parameters via gradient descent optimization procedures. Unfortunately, a naive use of AD does typically not provide useful gradients for programs involving parameter-dependent branching control flow, such as if-then-else or for-loop constructs. DiscoGrad provides an automatic transformation of C++ programs to a version that calculates a smoothed gradient *across* those constructs. It supports several backends for smoothing listed below. The tool is functional and supports many C++ constructs, but is still a *research prototype*.
+[Brief video description of DiscoGrad](https://github.com/philipp-andelfinger/DiscoGrad/assets/17525874/12851797-847b-4757-ad15-8387b21cf200)
 
 ## 💾 Installation
 
