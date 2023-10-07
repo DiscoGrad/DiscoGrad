@@ -207,5 +207,12 @@ Additionally, for reproduction of the results from the paper, we include the fol
 ## 📄 Cite
 
 ```
-Coming soon.
+@misc{kreikemeyer2023smoothing,
+      title={Smoothing Methods for Automatic Differentiation Across Conditional Branches}, 
+      author={Justin N. Kreikemeyer and Philipp Andelfinger},
+      year={2023},
+      eprint={2310.03585},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
 ```
