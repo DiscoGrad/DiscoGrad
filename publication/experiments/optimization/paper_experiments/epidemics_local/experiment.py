@@ -1,9 +1,9 @@
 from experiment_common import *
 
 programs = (
-  { 'name': 'paper_programs/epidemics/epidemics', 'stddevs': (0.01,), 'seed': (-1,), 'nreps': (100,), 'time_limit': (3600 * 1.1,), 'params': partial(uniform, 0, 1, 102) },
-  { 'name': 'paper_programs/epidemics/epidemics', 'stddevs': (0.02,), 'seed': (-1,), 'nreps': (100,), 'time_limit': (3600 * 1.1,), 'params': partial(uniform, 0, 1, 102) },
-  { 'name': 'paper_programs/epidemics/epidemics', 'stddevs': (0.04,), 'seed': (-1,), 'nreps': (100,), 'time_limit': (3600 * 1.1,), 'params': partial(uniform, 0, 1, 102) },
+  { 'name': 'epidemics/epidemics', 'stddevs': (0.01,), 'seed': (-1,), 'nreps': (100,), 'time_limit': (3600 * 1.1,), 'params': partial(uniform, 0, 1, 102) },
+  { 'name': 'epidemics/epidemics', 'stddevs': (0.02,), 'seed': (-1,), 'nreps': (100,), 'time_limit': (3600 * 1.1,), 'params': partial(uniform, 0, 1, 102) },
+  { 'name': 'epidemics/epidemics', 'stddevs': (0.04,), 'seed': (-1,), 'nreps': (100,), 'time_limit': (3600 * 1.1,), 'params': partial(uniform, 0, 1, 102) },
 )
 
 estimators = (

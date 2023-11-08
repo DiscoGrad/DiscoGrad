@@ -1,9 +1,9 @@
 from experiment_common import *
 
 programs = (
-  { 'name': 'paper_programs/ac/ac', 'stddevs': (0.05,), 'seed': (-1,), 'nreps': (10,), 'time_limit': (1800 * 1.1,), 'params': partial(normal, 0.0, 1e-5, 82) },
-  { 'name': 'paper_programs/ac/ac', 'stddevs': (0.1,), 'seed': (-1,), 'nreps': (10,), 'time_limit': (1800 * 1.1,), 'params': partial(normal, 0.0, 1e-5, 82) },
-  { 'name': 'paper_programs/ac/ac', 'stddevs': (0.2,), 'seed': (-1,), 'nreps': (10,), 'time_limit': (1800 * 1.1,), 'params': partial(normal, 0.0, 1e-5, 82) },
+  { 'name': 'ac/ac', 'stddevs': (0.05,), 'seed': (-1,), 'nreps': (10,), 'time_limit': (1800 * 1.1,), 'params': partial(normal, 0.0, 1e-5, 82) },
+  { 'name': 'ac/ac', 'stddevs': (0.1,), 'seed': (-1,), 'nreps': (10,), 'time_limit': (1800 * 1.1,), 'params': partial(normal, 0.0, 1e-5, 82) },
+  { 'name': 'ac/ac', 'stddevs': (0.2,), 'seed': (-1,), 'nreps': (10,), 'time_limit': (1800 * 1.1,), 'params': partial(normal, 0.0, 1e-5, 82) },
 )
 
 estimators = (
