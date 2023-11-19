@@ -60,6 +60,8 @@ def run(args):
             overall_start_time = pythons_time()
             prog_name_clean = prog['name'].replace('/', '_')
 
+            out_path = "results"
+
             opt_str = str(opt).replace('(', '-').replace('=', '_').replace(', ', '-').replace('))', '').replace(')', '')
             fname = f"{out_path}/{prog_name_clean}_stddev={stddev:.1g}_seed={seed}_nreps={nreps}-{estim['name']}_{estim_param_str}_{opt_str}-rep_{rep:04d}.txt"
             param_fname = f"{out_path}/{prog_name_clean}_stddev={stddev:.1g}_seed={seed}_nreps={nreps}-{estim['name']}_{estim_param_str}_{opt_str}-rep_{rep:04d}_final_params.txt"

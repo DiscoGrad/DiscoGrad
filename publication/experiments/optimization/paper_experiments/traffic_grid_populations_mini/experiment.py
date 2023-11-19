@@ -1,8 +1,8 @@
 from experiment_common import *
 
 programs = (
-  { 'name': 'paper_programs/traffic_grid_populations/traffic_grid_populations_2x2', 'stddevs': (0.2,), 'seed': (1,), 'nreps': (1,), 'time_limit':      1800 * 1.1, 'params': partial(uniform, 0, 2, 4),   },
-  { 'name': 'paper_programs/traffic_grid_populations/traffic_grid_populations_5x5', 'stddevs': (0.2,), 'seed': (1,), 'nreps': (1,), 'time_limit':      1800 * 1.1, 'params': partial(uniform, 0, 2, 25),   },
+  { 'name': 'traffic_grid_populations/traffic_grid_populations_2x2', 'stddevs': (0.2,), 'seed': (1,), 'nreps': (1,), 'time_limit':      1800 * 1.1, 'params': partial(uniform, 0, 2, 4),   },
+  { 'name': 'traffic_grid_populations/traffic_grid_populations_5x5', 'stddevs': (0.2,), 'seed': (1,), 'nreps': (1,), 'time_limit':      1800 * 1.1, 'params': partial(uniform, 0, 2, 25),   },
 )
  
 estimators = (
