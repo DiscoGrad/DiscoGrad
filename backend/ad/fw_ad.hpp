@@ -1,36 +1,38 @@
 #pragma once
 
 /** Operator-overloading implementation of forward-mode AD.
- *  Requires only a single pass by carrying along the adjoints for all program inputs.
- *  Relies on the compiler for vectorization.
- * 
+ *  Requires only a single pass by carrying along the adjoints for all program
+ * inputs. Relies on the compiler for vectorization.
+ *
  *  Copyright 2023 Philipp Andelfinger, Justin Kreikemeyer
- *  
- *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software
- *  and associated documentation files (the “Software”), to deal in the Software without
- *  restriction, including without limitation the rights to use, copy, modify, merge, publish,
- *  distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
- *  Software is furnished to do so, subject to the following conditions:
- *   
- *    The above copyright notice and this permission notice shall be included in all copies or
- *    substantial portions of the Software.
- *    
- *    THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
- *    INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- *    PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
- *    ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
- *    ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the “Software”), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ *    The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ *    THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *    SOFTWARE.
  */
 
+#include <algorithm>
 #include <assert.h>
+#include <cstdint>
+#include <iostream>
 #include <math.h>
 #include <stdio.h>
-#include <cstdint>
-#include <algorithm>
-#include <vector>
 #include <type_traits>
-#include <iostream>
+#include <vector>
 
 static constexpr int int_ceil(double x) {
   const int i = x;
@@ -219,11 +221,11 @@ public:
     fw_adouble r;                                                                                                                          \
     r.val = val OP other.val;                                                                                                              \
     if (single_adj_dim != -1 && single_adj_dim == other.single_adj_dim) {                                                                  \
-      int i = single_adj_dim;\
-      r.single_adj_dim = single_adj_dim;\
-      r.single_adj = ADJ_EXPR_A_A;\
-      return r;\
-    }\
+      int i = single_adj_dim;                                                                                                              \
+      r.single_adj_dim = single_adj_dim;                                                                                                   \
+      r.single_adj = ADJ_EXPR_A_A;                                                                                                         \
+      return r;                                                                                                                            \
+    }                                                                                                                                      \
     r.init_full_adj(true);                                                                                                                 \
     ITER_ADJ(ADJ_EXPR_A_A);                                                                                                                \
     return r;                                                                                                                              \
@@ -244,22 +246,24 @@ public:
 
 #define FW_ADOUBLE_ASSIGN_OP(ASSIGN_OP, BINARY_OP, ADJ_EXPR_A_A, ADJ_EXPR_A_D)                                                             \
   adouble_t operator ASSIGN_OP(const adouble_t &other) {                                                                                   \
-    val ASSIGN_OP other.val;                                                                                                               \
     fw_adouble &r = *this;                                                                                                                 \
     if (single_adj_dim != -1 && single_adj_dim == other.single_adj_dim) {                                                                  \
-      int i = single_adj_dim;\
-      r.single_adj_dim = single_adj_dim;\
-      r.single_adj = ADJ_EXPR_A_A;\
-      return r;\
-    }\
+      int i = single_adj_dim;                                                                                                              \
+      r.single_adj_dim = single_adj_dim;                                                                                                   \
+      r.single_adj = ADJ_EXPR_A_A;                                                                                                         \
+      val ASSIGN_OP other.val;                                                                                                             \
+      return r;                                                                                                                            \
+    }                                                                                                                                      \
     init_full_adj(true);                                                                                                                   \
     ITER_ADJ(ADJ_EXPR_A_A);                                                                                                                \
+    val ASSIGN_OP other.val;                                                                                                               \
     return *this;                                                                                                                          \
   }                                                                                                                                        \
   adouble_t operator ASSIGN_OP(double other) {                                                                                             \
-    val ASSIGN_OP other;                                                                                                                   \
-    if (!adj && single_adj_dim == -1)                                                                                                      \
+    if (!adj && single_adj_dim == -1) {                                                                                                    \
+      val ASSIGN_OP other;                                                                                                                 \
       return *this;                                                                                                                        \
+    }                                                                                                                                      \
     fw_adouble &r = *this;                                                                                                                 \
     if (single_adj_dim != -1) {                                                                                                            \
       int i = single_adj_dim;                                                                                                              \
@@ -268,6 +272,7 @@ public:
     }                                                                                                                                      \
     if (adj)                                                                                                                               \
       ITER_ADJ(ADJ_EXPR_A_D);                                                                                                              \
+    val ASSIGN_OP other;                                                                                                                   \
     return *this;                                                                                                                          \
   }
 
@@ -361,6 +366,7 @@ template <int num_adj_, bool enable_ad_> adouble_t operator/(double lhs, const a
     r.val = FUNC(x.val);                                                                                                                   \
     if (x.single_adj_dim != -1) {                                                                                                          \
       int i = x.single_adj_dim;                                                                                                            \
+      r.single_adj_dim = i;                                                                                                                \
       r.single_adj = ADJ_EXPR;                                                                                                             \
       return r;                                                                                                                            \
     }                                                                                                                                      \
