@@ -1,11 +1,13 @@
 import os
 import subprocess
+from functools import partial
 from reproduce_functions import *
 
+# list of benchmark programs
 programs = ["hotel/hotel.cpp"] + [f"traffic_grid_populations/traffic_grid_populations_{n}x{n}.cpp" for n in [2, 5, 10, 20]] + ["ac/ac.cpp", "epidemics/epidemics.cpp", "synthetic_example/synthetic_example.cpp"]
 
 print("This tool will guide you through the reproduction of the empirical results (figures) of our publication.")
-print("First, it is advisable to rebuild the discograd tool and smooth and compile all programs, but this step may be skipped if this was done recently.")
+print("First, it is advisable to rebuild the discograd tool and smooth and compile all programs but this step may be skipped if this was done recently.")
 choice = input("Do you want to proceed? (Y/n): ")
 if choice == "Y" or choice == "y" or choice == "":
   print("Ok, this may take a while...")
@@ -32,17 +34,18 @@ if choice == "Y" or choice == "y" or choice == "":
     print("done.")
 
 options = {**{
-  "Everything": everything,
+  #"Everything": everything,
   "Introductory figure": introduction_figure,
   "Figure regarding the assumptions of SI": synthetic_example,
-  "Optimization Performance (All plots)": todo,
+  "Optimization Performance (All plots)": partial(optimization, [prog for prog in programs if not any(x in prog for x in ["2x2", "5x5", "synthetic"])]),
 }, **{
-  f"Optimization Performance of {prog}": todo for prog in programs if "2x2" not in prog and "5x5" not in prog and "synthetic" not in prog
+  f"Optimization Performance of {prog}": partial(optimization, [prog]) for prog in programs if not any(x in prog for x in ["2x2", "5x5", "synthetic"])
 }, **{
-  "Gradient Accuracy (All plots and Matrix)": todo,
-  "Gradient Accuracy for Traffic 5x5": todo,
-  "Gradient Accuracy for Epidemics": todo,
-  "Gradient Accuracy for AC": todo,
+  "Gradient Fidelity (All plots and Matrix)": partial(fidelity, [prog for prog in programs if not any(x in prog for x in ["10x10", "20x20", "synthetic"])]),
+  #"Gradient Fidelity for Traffic 5x5": todo,
+  #"Gradient Fidelity for Epidemics": todo,
+  #"Gradient Fidelity for AC": todo,
+  "Runtime": todo,
   "Do nothing and exit": exit,
 }} 
 while True:

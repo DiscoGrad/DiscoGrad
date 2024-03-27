@@ -1,14 +1,5 @@
 import numpy as np
 
-# good seeds
-# range -4 to 4
-# 54321
-# 23458
-# 11876
-# 58285298
-# 2984
-
-
 programs = (
   {'name': 'synthetic_example/synthetic_example', 'nreps': (1,), 'params': (np.linspace(-1, 4, 1000),), 'seed': (2468,), 'stddevs': 0.33},
 )

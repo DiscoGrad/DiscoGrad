@@ -142,14 +142,16 @@ for prog_name, (ctime_limit, step_limit, window_ctime, window_step, zoom_y_lower
 
     m = re.search('mode=(.+?)-', min_y_crisp_fname[est_name])
     if m:
-      restrict_mode = int(m.group(1))
+      #restrict_mode = int(m.group(1))
+      restrict_mode = m.group(1)
   
     print("got restrict mode", restrict_mode)
 
     if not "/" in est_name:
-      restrict_mode_names = { 0: "Di", 3: "Ch", 4: "IW", 5: "WO" }
+      #restrict_mode_names = { 0: "Di", 3: "Ch", 4: "IW", 5: "WO" }
       if restrict_mode != None:
-        full_est_name[est_name] += "/" + restrict_mode_names[restrict_mode]
+      #  full_est_name[est_name] += "/" + restrict_mode_names[restrict_mode]
+        full_est_name[est_name] += "/" + restrict_mode
 
       if num_paths > 1:
         full_est_name[est_name] += "/" + str(num_paths)

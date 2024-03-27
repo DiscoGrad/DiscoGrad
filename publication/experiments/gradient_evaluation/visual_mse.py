@@ -18,14 +18,14 @@ import scipy.stats
 plt.rcParams.update({"font.size": 12})
 
 experiment_labels = {
-  "traffic2x2": "Traffic 2x2",
-  "traffic5x5": "Traffic 5x5",
+  "traffic_grid_populations_2x2": "Traffic 2x2",
+  "traffic_grid_populations_5x5": "Traffic 5x5",
   "epidemics": "Epidemics",
   "ac": "AC",
   "hotel": "Hotel",
 }
 
-parser = argparse.ArgumentParser(prog="run.py")
+parser = argparse.ArgumentParser(prog="visual_mse.py")
 parser.add_argument("experiments_path", type=str, help="The directory containing the experiment definitions.")
 parser.add_argument("results_path", type=str, help="The directory containing the experiment results.")
 #parser.add_argument("ndims", type=int, help="The number of dimensions of the model.")
@@ -34,8 +34,8 @@ parser.add_argument("--max", "-m", type=float, default=None)
 parser.add_argument("--ignore-cache", "-i", action="store_true", help="Force redoing all calculations.")
 args = parser.parse_args()
 
-experiments = ["ac", "traffic2x2", "traffic5x5", "hotel", "epidemics"]
-results = ["results_thermostat_09_08", "results_traffic_2x2_09_07", "results_traffic_5x5_09_07", "results_hotel_09_08", "results_epidemics_09_10"]
+experiments = ["ac", "traffic_grid_populations_2x2", "traffic_grid_populations_5x5", "hotel", "epidemics"]
+results = ["ac", "traffic_grid_populations_2x2", "traffic_grid_populations_5x5", "hotel", "epidemics"]
 ndims = [25, 4, 25, 25, 25]
 def include_files(file):
   return ("dgo" in file and ("samples=100-" in file or "samples=1000-" in file or "samples=10000-" in file)) or \
@@ -58,7 +58,7 @@ def extract_estimator(filename: str) -> str:
 def fname_to_label(fname):
   """Given an estimator string from extract_estimator, return a short label for plotting."""
   estimator_to_label = {"dgsi": "DGSI", "dgo": "DGO", "pgo": "PGO", "reinforce": "RF", "crisp__SA": "SA", "crisp__GA": "GA", "crisp_enable_ad=True": "IPA"}
-  restrict_mode_to_label = {0: "Di", 3: "Ch", 4: "IW", 5: " WO"}
+  #restrict_mode_to_label = {0: "Di", 3: "Ch", 4: "IW", 5: " WO"}
   m = re.search(r"([a-z]+(_[a-z]*)?)_num", fname)
   estimator_label = estimator_to_label[m.group(1)]
   num_paths = 1
@@ -70,9 +70,10 @@ def fname_to_label(fname):
   if m:
     num_samples = int(m.group(1))
   restrict_mode = None
-  m = re.search('restrict_mode=(\d+)', fname)
+  m = re.search('restrict_mode=(\w+)', fname)
   if m:
-    restrict_mode = restrict_mode_to_label[int(m.group(1))]
+    #restrict_mode = restrict_mode_to_label[int(m.group(1))]
+    restrict_mode = m.group(1)
   paths_samples_str = ""
   if not "GA" in estimator_label and not "SA" in estimator_label:
     #paths_samples_str = f", {num_paths if num_paths > 1 else num_samples} {'paths' if num_paths > 1 else 'samples'}"
@@ -96,6 +97,7 @@ for experiment, result, ndim in zip(experiments, results, ndims):
   result_path = os.path.join(args.results_path, result)
 
   sys.path.append(experiment_path)
+  print(experiment_path)
   import experiment
   importlib.reload(experiment)
   sys.path.remove(experiment_path)
@@ -172,6 +174,7 @@ for experiment, result, ndim in zip(experiments, results, ndims):
     for file in dfs:
       for dim in range(ndim):
         _mse_mean = None
+        _mse_var = None
         if dim in dfs[file] and dim in ref_dfs:
           print(file, dim, len(dfs[file][dim]))
           # for each makroreplication, calculate mean squared error for estimator in file, in the dimension dim

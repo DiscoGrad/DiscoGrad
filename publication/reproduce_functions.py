@@ -2,6 +2,7 @@
 import os
 from glob import glob
 import subprocess
+from typing import List
 
 # 3rd party
 import numpy as np
@@ -101,11 +102,81 @@ def synthetic_example():
   fig.savefig(outpath)
   print("Resulting figure written to", outpath, ".")
 
-def everything():
-  print("Warning: reproducing every result could take up to multiple weeks on a high-end machine. There is no mechanism to pause and resume.") 
-  proceed = input("Proceed anyway? (y/N): ")
-  if proceed != "y" and proceed != "Y":
-    exit(0)
+#def everything():
+#  print("Warning: reproducing every result could take up to multiple weeks on a high-end machine. There is no mechanism to pause and resume.") 
+#  proceed = input("Proceed anyway? (y/N): ")
+#  if proceed != "y" and proceed != "Y":
+#    exit(0)
+
+def optimization(program_paths: List[str]):
+  procs = []
+  for program_path in program_paths:
+    procs.extend(_optimization(program_path))
+  for proc in procs:
+    stdout, stderr = proc.communicate()
+    print(stdout, stderr)
+  # summarize
+  subprocess.call(["python3", "summarize.py", "--all", "results"], cwd="./experiments/optimization")
+  # draw plots
+  subprocess.call(["python3", "draw_optimization_plots.py", "results"], cwd="./experiments/optimization")
+
+def _optimization(program_path: str):
+  program_name = os.path.split(program_path)[0]
+  if program_name == "traffic_grid_populations":
+      program_name = os.path.splitext(os.path.split(program_path)[1])[0]
+  if not os.path.exists("./experiments/optimization/results"):
+    os.mkdir("./experiments/optimization/results")
+  cmd = "python3 optimize.py -pm -r 5 "
+  try:
+    global_cmd = cmd + f"paper_experiments/{program_name}_global"
+    print(global_cmd)
+    local_proc = subprocess.Popen(global_cmd.split(), cwd="./experiments/optimization", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(f"Global optimization for {program_name} now running...")
+  except subprocess.CalledProcessError as ex:
+    print(f"Failed to execute {cmd}.\nGot {ex}.")
+    exit(-1)
+  try:
+    local_cmd = cmd + f"paper_experiments/{program_name}_local"
+    print(local_cmd)
+    global_proc = subprocess.Popen(local_cmd.split(), cwd="./experiments/optimization", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(f"Local optimization for {program_name} now running...")
+  except subprocess.CalledProcessError as ex:
+    print(f"Failed to execute {cmd}.\nGot {ex}.")
+    exit(-1)
+  return [local_proc, global_proc]
+
+def fidelity(program_paths: List[str]):
+  #procs = []
+  #for program_path in program_paths:
+  #  procs.append(_fidelity(program_path))
+  #for proc in procs:
+  #  stdout, stderr = proc.communicate()
+  #  print(stdout, stderr)
+  # plotting
+  for subdir in ["ac", "epidemics", "hotel", "traffic_grid_populations_2x2", "traffic_grid_populations_5x5"]:
+    if not os.path.exists(f"./experiments/gradient_evaluation/results/{subdir}"):
+      os.mkdir(f"./experiments/gradient_evaluation/results/{subdir}")
+      for file in glob(f"./experiments/gradient_evaluation/results/*{subdir}*.txt"):
+        os.rename(file, f"./experiments/gradient_evaluation/results/{subdir}/{os.path.basename(file)}") 
+        #print("move", file, "to", f"./experiments/gradient_evaluation/results/{subdir}/{os.path.basename(file)}") 
+  subprocess.call(["python3", "visual_mse.py", "experiments/", "results/", "1", "--ignore-cache"], cwd="./experiments/gradient_evaluation")
+
+def _fidelity(program_path: str):
+  program_name = os.path.split(program_path)[0]
+  if program_name == "traffic_grid_populations":
+      program_name = os.path.splitext(os.path.split(program_path)[1])[0]
+  if not os.path.exists("./experiments/gradient_evaluation/results"):
+    os.mkdir("./experiments/gradient_evaluation/results")
+  cmd = "python3 run.py -r 1 "
+  try:
+    global_cmd = cmd + f"experiments/{program_name}"
+    print(global_cmd)
+    proc = subprocess.Popen(global_cmd.split(), cwd="./experiments/gradient_evaluation", stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    print(f"Gradient fidelity for {program_name} now running...")
+  except subprocess.CalledProcessError as ex:
+    print(f"Failed to execute {cmd}.\nGot {ex}.")
+    exit(-1)
+  return proc
 
 def todo():
   pass

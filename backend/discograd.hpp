@@ -145,6 +145,7 @@ public:
         parameters[dim].set_initial_adj(dim, 1);
       }
 
+      exp_val = 0.0; // reset expectation for --nc flag
       start_timer();
       estimate_(program);
       stop_timer();
