@@ -10,9 +10,9 @@ Automatic Differentiation (AD) is a popular method to obtain the gradient of com
 Supported operating systems: `Linux`
 Tested on: `Fedora 38 Workstation`, `Ubuntu 22.04.1 LTS` and `Arch Linux`
 
-To compile the transformation code, you need the following packages (or their counterparts provided by your Linux distribution):
-- `clang`, `clang-devel`
-- `llvm`, `llvm-devel`
+To compile the transformation code, you need the following packages (or their counterparts provided by your Linux distribution; higher versions may also work):
+- `clang-13` (including dev packages)
+- `llvm-13`, (including dev packages)
 - `cmake`
 
 ```

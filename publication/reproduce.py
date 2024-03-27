@@ -41,7 +41,7 @@ options = {**{
 }, **{
   f"Optimization Performance of {prog}": partial(optimization, [prog]) for prog in programs if not any(x in prog for x in ["2x2", "5x5", "synthetic"])
 }, **{
-  "Gradient Fidelity (All plots and Matrix)": partial(fidelity, [prog for prog in programs if not any(x in prog for x in ["10x10", "20x20", "synthetic"])]),
+  "Gradient Fidelity (Matrix)": partial(fidelity, [prog for prog in programs if not any(x in prog for x in ["10x10", "20x20", "synthetic"])]),
   #"Gradient Fidelity for Traffic 5x5": todo,
   #"Gradient Fidelity for Epidemics": todo,
   #"Gradient Fidelity for AC": todo,

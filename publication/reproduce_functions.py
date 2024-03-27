@@ -109,12 +109,12 @@ def synthetic_example():
 #    exit(0)
 
 def optimization(program_paths: List[str]):
-  procs = []
   for program_path in program_paths:
+    procs = []
     procs.extend(_optimization(program_path))
-  for proc in procs:
-    stdout, stderr = proc.communicate()
-    print(stdout, stderr)
+    for proc in procs: # do not parallelize over experiments, as performance critical
+      stdout, stderr = proc.communicate()
+      print(stdout, stderr)
   # summarize
   subprocess.call(["python3", "summarize.py", "--all", "results"], cwd="./experiments/optimization")
   # draw plots
@@ -126,7 +126,7 @@ def _optimization(program_path: str):
       program_name = os.path.splitext(os.path.split(program_path)[1])[0]
   if not os.path.exists("./experiments/optimization/results"):
     os.mkdir("./experiments/optimization/results")
-  cmd = "python3 optimize.py -pm -r 5 "
+  cmd = "python3 optimize.py -r 5 "
   try:
     global_cmd = cmd + f"paper_experiments/{program_name}_global"
     print(global_cmd)
@@ -146,12 +146,12 @@ def _optimization(program_path: str):
   return [local_proc, global_proc]
 
 def fidelity(program_paths: List[str]):
-  #procs = []
-  #for program_path in program_paths:
-  #  procs.append(_fidelity(program_path))
-  #for proc in procs:
-  #  stdout, stderr = proc.communicate()
-  #  print(stdout, stderr)
+  procs = []
+  for program_path in program_paths:
+    procs.append(_fidelity(program_path))
+  for proc in procs: # parallelize everything, as performance not critical
+    stdout, stderr = proc.communicate()
+    print(stdout, stderr)
   # plotting
   for subdir in ["ac", "epidemics", "hotel", "traffic_grid_populations_2x2", "traffic_grid_populations_5x5"]:
     if not os.path.exists(f"./experiments/gradient_evaluation/results/{subdir}"):
@@ -179,4 +179,5 @@ def _fidelity(program_path: str):
   return proc
 
 def todo():
-  pass
+  print("\nThis is not yet implemented by this assistant. You can try reproducing it on your own or ask the authors for support.\n")
+
