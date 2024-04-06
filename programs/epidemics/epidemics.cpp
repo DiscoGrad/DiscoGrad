@@ -1,4 +1,4 @@
-/*  Copyright 2023 Philipp Andelfinger, Justin Kreikemeyer
+/*  Copyright 2023, 2024 Philipp Andelfinger, Justin Kreikemeyer
  *  
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software
  *  and associated documentation files (the “Software”), to deal in the Software without
@@ -76,7 +76,7 @@ struct Hist {
 // randomness
 const int loc_seed = 1234567;      // the same for each replication
 default_random_engine loc_gen;     // for easy reproducible gen of locations
-sdouble uniform_to_exp(double u, sdouble& mean)
+adouble uniform_to_exp(double u, adouble& mean)
 {
     return -mean * log(u);
 }
@@ -195,17 +195,17 @@ void write_states(Hist states[][nLocs])
 //  fclose(fp);
 //}
 
-void print_state(const vector<sdouble>& s, const vector<vector<int>>& loc_to_agents, const vector<sdouble>& loc_infection_prob)
+void print_state(const vector<adouble>& s, const vector<vector<int>>& loc_to_agents, const vector<adouble>& loc_infection_prob)
 {
   int loc_c = 0;
   for (auto loc_it = loc_to_agents.begin(); loc_it != loc_to_agents.end(); ++loc_it)
   {
     auto loc = *loc_it;
-    printf("loc %d (%lf%%): ", loc_c, loc_infection_prob[loc_c].expectation().val*100.0);
+    printf("loc %d (%lf%%): ", loc_c, loc_infection_prob[loc_c].val*100.0);
     for (auto a_it = loc.begin(); a_it != loc.end(); ++a_it)
     {
       int a = *a_it;
-      printf("a%d(%s), ", a, s[a].expectation().val == 0 ? "sus" : s[a].expectation().val  == 1 ? "inf" : "rec");
+      printf("a%d(%s), ", a, s[a].val == 0 ? "sus" : s[a].val  == 1 ? "inf" : "rec");
     }
     printf("\n");
     loc_c++;
@@ -216,16 +216,16 @@ void print_state(const vector<sdouble>& s, const vector<vector<int>>& loc_to_age
 adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, num_inputs> &x, Hist ref_states[][nLocs], Hist out_states[][nLocs], int nAgents, int endTime)
 {
   // model inputs
-  sdouble mean_recovery_time({x[0], _discograd.get_variance()}); // mean recovery time (= mean of exponentially distributed sojourn time) relative to end time
+  adouble mean_recovery_time = x[0]; // mean recovery time (= mean of exponentially distributed sojourn time) relative to end time
   mean_recovery_time *= endTime;
-  sdouble init_infected_prob({x[1], _discograd.get_variance()});  // initial infection probability (equal for all agents)
-  vector<sdouble> loc_infection_prob(nLocs);      // per-location infection probability
+  adouble init_infected_prob = x[1];  // initial infection probability (equal for all agents)
+  vector<adouble> loc_infection_prob(nLocs);      // per-location infection probability
   for (int loc = 0; loc < nLocs; ++loc)
-    loc_infection_prob[loc] = sdouble({x[loc+2], _discograd.get_variance()});
+    loc_infection_prob[loc] = x[loc+2];
 
   // list of agents (double-buffered)
-  sdouble recovery_timer[nAgents];                       // recovery timer for each agent
-  vector<sdouble> s(nAgents), s_buff(nAgents);           // SIR state for each agent (smooth)
+  adouble recovery_timer[nAgents];                       // recovery timer for each agent
+  vector<adouble> s(nAgents), s_buff(nAgents);           // SIR state for each agent (smooth)
   vector<vector<int>> loc_to_agents, loc_to_agents_buff; // mapping from location id to agent id
   loc_to_agents.resize(nLocs);
   loc_to_agents_buff.resize(nLocs);
@@ -245,10 +245,10 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
     loc_to_agents[loc].push_back(a);
     loc_to_agents_buff[loc].push_back(a);
     // set initial infection state and recovery time
-    sdouble recovery_time = 0.0;
-    sdouble state = 0;
+    adouble recovery_time = 0.0;
+    adouble state = 0;
     double infect = uniform_dist(_discograd.rng);
-    sdouble temp_rec = uniform_to_exp(uniform_dist(_discograd.rng), mean_recovery_time);
+    adouble temp_rec = uniform_to_exp(uniform_dist(_discograd.rng), mean_recovery_time);
     if (init_infected_prob > infect)
     {
       state = INF;
@@ -263,7 +263,7 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
 #endif
 
   // the final output
-  sdouble loss = 0.0;
+  adouble loss = 0.0;
 
   for (int t = 0; t < endTime; ++t) 
   {
@@ -283,9 +283,9 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
         }
       }
       // else, if susceptible to the disease, (possibly) get infected by neighbours
-      sdouble infection_prob = loc_infection_prob[loc];
-      sdouble infect = uniform_dist(_discograd.rng);
-      sdouble temp_recovery = uniform_to_exp(uniform_dist(_discograd.rng), mean_recovery_time);
+      adouble infection_prob = loc_infection_prob[loc];
+      adouble infect = uniform_dist(_discograd.rng);
+      adouble temp_recovery = uniform_to_exp(uniform_dist(_discograd.rng), mean_recovery_time);
       if (infection_prob > infect) 
       {
         vector<int> neighbours = loc_to_agents[loc];
@@ -302,7 +302,7 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
               {
                 s_buff[a] = INF;
                 recovery_timer[a] = temp_recovery;
-                //printf_debug("Agent a%d is now infected. Recovery scheduled at %lf\n", a, recovery_timer[a].expectation().val);
+                //printf_debug("Agent a%d is now infected. Recovery scheduled at %lf\n", a, recovery_timer[a].val);
                 //break;
               }
             }
@@ -340,7 +340,7 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
       loc_to_agents[loc] = loc_to_agents_buff[loc];
     }
 
-    sdouble out_hist[nLocs][num_states];
+    adouble out_hist[nLocs][num_states];
 
     // build histogram and update loss
     for (int a = 0; a < nAgents; ++a)
@@ -355,11 +355,11 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
     for (int loc = 0; loc < nLocs; loc++) {
       for (int i = 0; i < num_states; ++i) { 
         // update output states
-        out_states[t][loc].s[i] = out_hist[loc][i].expectation().val;
+        out_states[t][loc].s[i] = out_hist[loc][i].val;
         printf_debug("%f, ", out_states[t][loc].s[i]);
         // update loss
-        printf_debug("ref %lf out %lf\n", ref_states[loc].s[i], out_hist[loc][i].expectation().get_val());
-        sdouble err = ref_states[t][loc].s[i] - out_hist[loc][i];
+        printf_debug("ref %lf out %lf\n", ref_states[loc].s[i], out_hist[loc][i].get_val());
+        adouble err = ref_states[t][loc].s[i] - out_hist[loc][i];
         loss += err * err / nLocs;
       }
     }
@@ -372,7 +372,7 @@ adouble _DiscoGrad_epidemics(DiscoGrad<num_inputs> &_discograd, array<adouble, n
 
   }
 
-  return loss.expectation();
+  return loss;
 }
 
 
@@ -418,7 +418,7 @@ public:
     // debugging 
     printf_debug("rexpectation: %lf\n", y.val);
     for (int i = 0; i < num_inputs; ++i) {
-      printf_debug("rderivative: %lf\n", y.get_adj(i));
+      printf_debug("rderivative: %lf\n", y.get_tang(i));
     }
 
     return y;

@@ -1,7 +1,0 @@
-
-# any results
-**/results*
-
-# visual_mse.py cache files
-gradient_evaluation/*.npy
-gradient_evaluation/mse_matrix.pdf

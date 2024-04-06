@@ -14,14 +14,10 @@ using namespace std;
  */
 adouble _DiscoGrad_heaviside(DiscoGrad<num_inputs> &_discograd, aparams &p)
 {
-  sdouble x({p[0], _discograd.get_variance()}); // initialize the single input value with the input variance
-  sdouble y;
-  if (x <= 0)                   // a smoothed branch
-    y = 1;
-  else
-    y = 0;
-  y.print();                    // for debugging
-  return y.expectation();       // return the smoothed output (expected value) 
+  if (p[0] < 0)
+    return 0;
+
+  return 1;
 }
 
 /* Wrapper class for the smoothed function (only necessary if the smoothed func takes extra parameters) 
@@ -35,11 +31,10 @@ adouble _DiscoGrad_heaviside(DiscoGrad<num_inputs> &_discograd, aparams &p)
 
 int main(int argc, char **argv)
 {
-  // ceate a new instance of the discograd estimator.
-  // (can be chosen at compile time as `-DSI` or `-DSAMPLING`)
+  // create a new instance of the discograd estimator.
   // this will read the parameters (of which there are `num_inputs`) from stdin.
   // additional configuration options, such as the smoothing variance, are read from the cli arguments.
-  DiscoGrad<num_inputs> dg(argc, argv, true);
+  DiscoGrad<num_inputs> dg(argc, argv, false);
   // instantiate the program wrapper for the heaviside function
   //HelloSmoothing prog;
   DiscoGradFunc<num_inputs> func(_DiscoGrad_heaviside);

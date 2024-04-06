@@ -2,7 +2,7 @@
  *  for all scoped code, for example in short if statements, to prepare
  *  the code for the smoothing ASTVisitor.
  * 
- *  Copyright 2023 Philipp Andelfinger, Justin Kreikemeyer
+ *  Copyright 2023, 2024 Philipp Andelfinger, Justin Kreikemeyer
  *  
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software
  *  and associated documentation files (the “Software”), to deal in the Software without
@@ -91,49 +91,11 @@ public:
       }
 
       Stmt *Else = If->getElse();
-      if (Else && !isa<CompoundStmt>(Else)) {
-          rewriter.InsertText(Else->getBeginLoc(), "{");
-          rewriter.InsertText(GET_LOC_END(Else), "}");
-      }
-    }
-
-    if (isa<ForStmt>(s)) {
-      ForStmt *For = cast<ForStmt>(s);
-
-      // move initializer outside the statement, in a new scope
-      Stmt *Init = For->getInit();
-      auto InitText = rewriter.getRewrittenText(Init->getSourceRange());
-
-      rewriter.InsertText(For->getBeginLoc(), "{\n" + InitText + "\n");
-      rewriter.InsertText(GET_LOC_END(For), "\n}\n");
-
-      rewriter.InsertText(Init->getBeginLoc(), "/* ");
-      rewriter.InsertText(GET_LOC_BEFORE_END(Init).getLocWithOffset(-1), " */");
-
-      Stmt *ForBody = For->getBody();
-      if (!isa<CompoundStmt>(ForBody)) {
-        rewriter.InsertText(ForBody->getBeginLoc(), "{");
-        rewriter.InsertText(GET_LOC_END(ForBody), "}");
-      }
-    }
-
-    if (isa<WhileStmt>(s)) {
-      WhileStmt *While = cast<WhileStmt>(s);
-
-      Stmt *WhileBody = While->getBody();
-      if (!isa<CompoundStmt>(WhileBody)) {
-        rewriter.InsertText(WhileBody->getBeginLoc(), "{");
-        rewriter.InsertText(GET_LOC_END(WhileBody), "}");
-      }
-    }
-
-    if (isa<DoStmt>(s)) {
-      DoStmt *Do = cast<DoStmt>(s);
-
-      Stmt *DoBody = Do->getBody();
-      if (!isa<CompoundStmt>(DoBody)) {
-        rewriter.InsertText(DoBody->getBeginLoc(), "{");
-        rewriter.InsertText(GET_LOC_END(DoBody), "}");
+      if (!Else) {
+        rewriter.InsertText(isa<CompoundStmt>(Then) ? GET_LOC_BEFORE_END(Then) : GET_LOC_END(Then), "else { }");
+      } else if (!isa<CompoundStmt>(Else)) {
+        rewriter.InsertText(Else->getBeginLoc(), "{");
+        rewriter.InsertText(GET_LOC_END(Else), "}");
       }
     }
 

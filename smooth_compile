@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-#  Copyright 2023 Philipp Andelfinger, Justin Kreikemeyer
+#  Copyright 2023, 2024 Philipp Andelfinger, Justin Kreikemeyer
 #  
 #  Permission is hereby granted, free of charge, to any person obtaining a copy of this software
 #  and associated documentation files (the “Software”), to deal in the Software without
@@ -21,6 +21,12 @@
 set -e
 set -o pipefail
 
+# set this variable and uncomment "libtorch_flags" below to compile with torch support
+#libtorch_root=$HOME/libtorch
+#libtorch_flags="-I$libtorch_root/include -I$libtorch_root/include/torch/csrc/api/include -Wl,-rpath,$libtorch_root/lib $libtorch_root/lib/libtorch.so $libtorch_root/lib/libkineto.a $libtorch_root/lib/libtorch_cpu.so $libtorch_root/lib/libc10.so"
+
+opt_flags="-gdwarf-4 -O3 -march=native -flto -mf16c"
+
 function preface {
   echo -n "$1"
   local d="${1-}" f=${2-}
@@ -29,48 +35,63 @@ function preface {
   fi
 }
 
-cpp_flags="-fdiagnostics-color=always -std=c++20"
-opt_flags="-g -O3 -march=native -mf16c"
-transform_flags=$(preface --extra-arg= $cpp_flags -DNO_AD -DCRISP)
-CPATH=$CPATH:$(clang++ -v 2>&1| grep 'Selected GCC installation' | awk '{print $NF}')/include
-
-prefix=${1%.*}
-dgsi_normalized_fname=${prefix}_normalized_dgsi.cpp
-dgsi_fname=${prefix}_dgsi.cpp
-dgo_fname=${prefix}_dgo.cpp
+src_fname=$1
+prefix=${src_fname%.*}
 ad_flag=FW_AD
-
 args_fname=backend/args.cpp
 
+shift
+
+program_user_flags=()
+dgo_user_flags=()
+for elem in $@; do
+  if [[ $elem == -DDGO* ]]; then
+    dgo_user_flags+="$elem "
+  else
+    program_user_flags+="$elem "
+  fi
+done
+
+program_user_flags_suffix=""
+if [ -n "$program_user_flags" ]; then
+  program_user_flags_suffix=_$(echo $program_user_flags | tr " " "_")
+fi
+
+cpp_flags="-fdiagnostics-color=always -std=c++20 -Ibackend $program_user_flags"
+dgo_cpp_flags="$cpp_flags $dgo_user_flags"
+
+dgo_user_flags_suffix=""
+if [ -n "$dgo_user_flags" ]; then
+  dgo_user_flags_suffix=_$(echo $dgo_user_flags | tr " " "_")
+fi
+
+transform_flags=$(preface --extra-arg= $cpp_flags -DNO_AD -DCRISP $libtorch_flags -Wno-unused-command-line-argument)
+CPATH=$CPATH:$(clang++ -v 2>&1| grep 'Selected GCC installation' | awk '{print $NF}')/include
+
 # crisp with the option for sampling (e.g., for IPA)
-echo "Compiling crisp versions as ${prefix}_crisp(_ad)..."
-( clang++ $cpp_flags $opt_flags -Wall -I. $1 $args_fname -DCRISP -DNO_AD -o ${prefix}_crisp || exit
-clang++ $cpp_flags $opt_flags -Wall -I. $1 $args_fname -DCRISP -DFW_AD -o ${prefix}_crisp_ad || exit
+echo "Compiling crisp versions as ${prefix}${program_user_flags_suffix}_crisp(_ad)..."
+( clang++ $cpp_flags $opt_flags -Wall -I. $src_fname $args_fname -DCRISP -DNO_AD -o ${prefix}${program_user_flags_suffix}_crisp $libtorch_flags || exit
+clang++ $cpp_flags $opt_flags -Wall -I. $src_fname $args_fname -DCRISP -DFW_AD -o ${prefix}${program_user_flags_suffix}_crisp_ad $libtorch_flags || exit
 echo "Finished compiling ${prefix}_crisp(_ad)" ) &
 
 # Polyak Gradient Oracle (PGO)
-echo "Compiling Polyak Gradient Oracle version as ${prefix}_pgo..."
-( clang++ $cpp_flags $opt_flags -Wall -I. $1 $args_fname -DPGO -DNO_AD -o ${prefix}_pgo || exit
+echo "Compiling Polyak Gradient Oracle version as ${prefix}${program_user_flags_suffix}_pgo..."
+( clang++ $cpp_flags $opt_flags -Wall -I. $src_fname $args_fname -DPGO -DNO_AD -o ${prefix}${program_user_flags_suffix}_pgo $libtorch_flags || exit
 echo "Finished compiling ${prefix}_pgo" ) &
 
-# REINFORCE
-echo "Compiling REINFORCE version as ${prefix}_reinforce..."
-( clang++ $cpp_flags $opt_flags -Wall -I. $1 $args_fname -DREINFORCE -DNO_AD -o ${prefix}_reinforce || exit
+### REINFORCE
+echo "Compiling REINFORCE version as ${prefix}${program_user_flags_suffix}_reinforce..."
+( clang++ $cpp_flags $opt_flags -Wall -I. $src_fname $args_fname -DREINFORCE -DNO_AD -o ${prefix}${program_user_flags_suffix}_reinforce $libtorch_flags || exit
 echo "Finished compiling ${prefix}_reinforce" ) &
 
-# DGSI
-echo "Compiling DGSI versions as ${prefix}_dgsi(_noad)..."
-( CPATH=${CPATH} ./transformation/normalize $transform_flags $1 | clang-format > $dgsi_normalized_fname || exit
-CPATH=${CPATH} ./transformation/smooth_dgsi $transform_flags $dgsi_normalized_fname | clang-format > $dgsi_fname || exit
-clang++ $cpp_flags $opt_flags -Wall -I. $dgsi_fname $args_fname -DSI -D$ad_flag -o ${prefix}_dgsi || exit
-clang++ $cpp_flags $opt_flags -Wall -I. $dgsi_fname $args_fname -DSI -DNO_AD -o ${prefix}_dgsi_noad || exit
-echo "Finished compiling ${prefix}_dgsi(_noad)" ) &
+normalized_fname="${prefix}${program_user_flags_suffix}${dgo_user_flags_suffix}_normalized.cpp"
+dgo_fname="${prefix}${program_user_flags_suffix}${dgo_user_flags_suffix}_dgo.cpp"
+CPATH=${CPATH} ./transformation/normalize $transform_flags $src_fname | clang-format > $normalized_fname || exit
 
 # DiscoGrad Gradient Oracle (DGO)
-echo "Compiling DiscoGrad Gradient Oracle versions as ${prefix}_dgo(_noad)..."
-( CPATH=${CPATH} ./transformation/smooth_dgo $transform_flags $1 | clang-format > $dgo_fname || exit
-clang++ $cpp_flags $opt_flags -Wall -I. $dgo_fname $args_fname -DDGO -D$ad_flag -o ${prefix}_dgo || exit
-clang++ $cpp_flags $opt_flags -Wall -I. $dgo_fname $args_fname -DDGO -DNO_AD -o ${prefix}_dgo_noad || exit
-echo "Finished compiling ${prefix}_dgo(_noad)" ) &
+echo "Compiling DiscoGrad Gradient Oracle versions as ${prefix}${program_user_flags_suffix}_dgo${dgo_user_flags_suffix}..."
+( CPATH=${CPATH} ./transformation/smooth_dgo $transform_flags $normalized_fname | clang-format > $dgo_fname || exit
+clang++ $cpp_flags $dgo_user_flags $opt_flags -Wall -I. $dgo_fname $args_fname -DDGO -D$ad_flag -o ${prefix}${program_user_flags_suffix}_dgo${dgo_user_flags_suffix} $libtorch_flags || exit
+echo "Finished compiling ${prefix}_dgo" ) &
 
 wait

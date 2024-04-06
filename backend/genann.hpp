@@ -38,22 +38,22 @@ public:
   static const int total_weights = (hidden_weights + output_weights);
   static const int total_neurons = (inputs + hidden * hidden_layers + outputs);
 
-  sdouble weight[total_weights];
-  sdouble output[total_neurons];
+  adouble weight[total_weights];
+  adouble output[total_neurons];
 
-  //static sdouble act(sdouble &a) { return tanh(a); }
-  static sdouble act(sdouble &a) { return (sdouble)1.0 / (exp(-a) + 1); }
-  static sdouble act_output(sdouble a) { return (sdouble)1.0 / (exp(-a) + 1); }
+  //static adouble act(adouble &a) { return tanh(a); }
+  static adouble act(adouble &a) { return (adouble)1.0 / (exp(-a) + 1); }
+  static adouble act_output(adouble a) { return (adouble)1.0 / (exp(-a) + 1); }
 
-  genann(array<adouble, num_inputs> &p, double variance, int offset = 0) {
+  genann(array<adouble, num_inputs> &p, int offset = 0) {
     for (int i = 0; i < total_weights; i++)
-      weight[i] = sdouble({p[i + offset], variance});
+      weight[i] = p[i + offset];
   }
 
-  sdouble *run(sdouble *in) {
-    sdouble *w = weight;
-    sdouble *o = output + inputs;
-    sdouble *i = output;
+  adouble *run(adouble *in) {
+    adouble *w = weight;
+    adouble *o = output + inputs;
+    adouble *i = output;
 
     for (int i = 0; i < inputs; i++)
       output[i] = in[i];
@@ -61,9 +61,9 @@ public:
     int h, j, k;
 
     if (!hidden_layers) {
-      sdouble *ret = o;
+      adouble *ret = o;
       for (j = 0; j < outputs; ++j) {
-        sdouble sum = *w++ * -1.0;
+        adouble sum = *w++ * -1.0;
         for (k = 0; k < inputs; ++k) {
           sum += *w++ * i[k];
         }
@@ -74,7 +74,7 @@ public:
     }
 
     for (j = 0; j < hidden; ++j) {
-      sdouble sum = *w++ * -1.0;
+      adouble sum = *w++ * -1.0;
       for (k = 0; k < inputs; ++k) {
         sum += *w++ * i[k];
       }
@@ -85,7 +85,7 @@ public:
 
     for (h = 1; h < hidden_layers; ++h) {
       for (j = 0; j < hidden; ++j) {
-        sdouble sum = *w++ * -1.0;
+        adouble sum = *w++ * -1.0;
         for (k = 0; k < hidden; ++k) {
           sum += *w++ * i[k];
         }
@@ -95,10 +95,10 @@ public:
       i += hidden;
     }
 
-    sdouble *ret = o;
+    adouble *ret = o;
 
     for (j = 0; j < outputs; ++j) {
-      sdouble sum = *w++ * -1.0;
+      adouble sum = *w++ * -1.0;
       for (k = 0; k < hidden; ++k) {
         sum += *w++ * i[k];
       }

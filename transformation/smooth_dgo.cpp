@@ -1,7 +1,7 @@
-/** Contains an ASTVisitor that inserts the proper backend calls
+/** Contains an ASTVisitor that inserts the backend calls required
  *  for smoothing.
  *
- *  Copyright 2023 Philipp Andelfinger, Justin Kreikemeyer
+ *  Copyright 2023, 2024 Philipp Andelfinger, Justin Kreikemeyer
  *  
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software
  *  and associated documentation files (the “Software”), to deal in the Software without
@@ -48,8 +48,7 @@ Rewriter rewriter;
 #define GET_LOC_END(S) GET_LOC_BEFORE_END(S).getLocWithOffset(1)
 
 /** Transforms the AST nodes of C++ functions to be smoothed 
- *  into smoothed versions by inserting the proper backend 
- *  (cf. {@link si.hpp}) calls.
+ *  by inserting calls to the DGO backend 
  */
 class SmoothVisitor : public RecursiveASTVisitor<SmoothVisitor> {
 private:
@@ -64,6 +63,8 @@ private:
   SourceManager &srcMgr;
   const LangOptions &langOpts;
 
+  uint64_t nextBranchPos = 0;
+
 public:
   explicit SmoothVisitor(ASTContext *Context) : Context(Context), srcMgr(Context->getSourceManager()), langOpts(Context->getLangOpts()) {
     rewriter.setSourceMgr(srcMgr, langOpts);
@@ -73,14 +74,44 @@ public:
     if (isa<Expr>(stmt)) {
       Expr *e = cast<Expr>(stmt);
       string typeStr = e->getType().getAsString();
-      if (typeStr.find("sdouble") != string::npos)
+      if (typeStr.find("adouble") != string::npos) {
         return true;
+      }
     }
     for (auto it = stmt->children().begin(); it != stmt->children().end(); it++) {
       if (needsSmoothing(*it))
         return true;
     }
     return false;
+  }
+
+  uint64_t countNestedIfs(Stmt *stmt) {
+    if (stmt == nullptr)
+      return 0;
+
+    uint64_t count = 0;
+    if (isa<IfStmt>(stmt)) {
+      IfStmt *If = cast<IfStmt>(stmt);
+      Expr *Cond = If->getCond();
+      auto CondText = rewriter.getRewrittenText(Cond->getSourceRange());
+
+      string unhandledOps[] = { "||", "&&", "==", "!=" };
+
+      bool skip = false;
+      for (auto &op : unhandledOps) {
+        if (CondText.find(op) != string::npos) {
+          skip = true;
+          break;
+        }
+      }
+      
+      if (!skip && needsSmoothing(Cond))
+        count++;
+    }
+    for (auto it = stmt->children().begin(); it != stmt->children().end(); it++) {
+      count += countNestedIfs(*it);
+    }
+    return count;
   }
 
   bool crispUpToOutermostLoop(Stmt *stmt) {
@@ -118,59 +149,77 @@ public:
 
     if (isa<IfStmt>(s)) {
       IfStmt *If = cast<IfStmt>(s);
+      Stmt *Else = If->getElse();
       Expr *Cond = If->getCond();
 
-      if (!needsSmoothing(Cond))
-        return true;
+      bool smoothedBranch = false;
+      if (needsSmoothing(Cond)) {
 
-      auto CondText = rewriter.getRewrittenText(Cond->getSourceRange());
+        auto CondText = rewriter.getRewrittenText(Cond->getSourceRange());
 
-      // FIXME: problem with the following:
-      // if (x < dist(x)), where dist(x) is non-deterministic results in the wrong expression
-      // one idea is to store dist(x) in a temp value, but would need to do this for
-      // all function calls inside Cond.
+        string unhandledOps[] = { "||", "&&", "==", "!=" };
 
-      //cerr << "CondText is " << CondText << endl;
-      if (CondText.find("||") != string::npos || CondText.find("&&") != string::npos)
-        return true;
+        bool skip = false;
+        for (auto &op : unhandledOps)
+          if (CondText.find(op) != string::npos)
+            skip = true;
 
-      // cant smooth (in)equality for now
-      if (CondText.find("==") != string::npos || CondText.find("!=") != string::npos)
-        return true;
+        if (!skip) {
+          string leCmps[] = { "<=", "<" };
+          for (const string& cmpOp : leCmps) {
+            auto cmpPos = CondText.find(cmpOp);
+            if (cmpPos != string::npos) {
+              CondText.replace(cmpPos, cmpOp.length(), "-(");
+              CondText += ")";
+              smoothedBranch = true;
+            }
+          }
 
-      bool foundComparison = false;
+          auto geCmps = { ">=", ">" };
+          for (const string& cmpOp : geCmps) {
+            auto cmpPos = CondText.find(cmpOp);
+            if (cmpPos != string::npos) {
+              CondText = CondText.substr(cmpPos + cmpOp.length()) + "- (" + CondText.substr(0, cmpPos) + ")";
+              smoothedBranch = true;
+            }
+          }
 
-      // replace all <= with -
-      if (CondText.find("<=") != string::npos) {
-        CondText.replace(CondText.find("<="), 2, "-(");
-        foundComparison = true;
-      }
-      // replace all >= with *(-1)+
-      if (CondText.find(">=") != string::npos) {
-        CondText.replace(CondText.find(">="), 2, "*(-1)+(");
-        foundComparison = true;
-      }
-      // replace all < with -
-      if (CondText.find("<") != string::npos) {
-        CondText.replace(CondText.find("<"), 1, "-(");
-        foundComparison = true;
-      }
-      // replace all > with *(-1)+
-      if (CondText.find(">") != string::npos) {
-        CondText.replace(CondText.find(">"), 1, "*(-1)+(");
-        foundComparison = true;
-      }
+          if (smoothedBranch) {
+            auto condVarName = "_discograd_cond_" + to_string(nextBranchPos);
+            rewriter.InsertText(If->getBeginLoc(), "\nadouble " + condVarName + " = " + CondText + ";\n"); 
+            auto endBlockLoc = GET_LOC_BEFORE_END(Else);
+            rewriter.InsertText(If->getBeginLoc(), "\n_discograd.prepare_branch(" + to_string(nextBranchPos) + ", " + condVarName + ");\n"); 
+            rewriter.InsertText(Cond->getBeginLoc(), condVarName + " < 0.0 /*"); 
+            rewriter.InsertText(GET_LOC_BEFORE_END(Cond), " */"); 
 
-
-      // if there is still no comparison operator, then we handle it like equality
-      if (!foundComparison) {
-        return true;
+            rewriter.InsertText(endBlockLoc, "\n_discograd.end_block();\n");
+          }
+        }
       }
 
-      rewriter.InsertText(
-        If->getBeginLoc(),
-        "\n_discograd.prepare_branch(" + CondText + "));\n"
-      ); 
+      Stmt *Then = If->getThen();
+      vector<uint64_t> thenBranchPositions;
+      vector<uint64_t> elseBranchPositions;
+      uint64_t thenIfs = countNestedIfs(Then);
+      uint64_t elseIfs = countNestedIfs(Else);
+
+      uint64_t bpos = nextBranchPos + smoothedBranch;
+      for (int i = 0; i < thenIfs; i++) {
+        rewriter.InsertText(Else->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
+        bpos++;
+      }
+      for (int i = 0; i < elseIfs; i++) {
+        rewriter.InsertText(Then->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
+        bpos++;
+      }
+
+      auto endBlockLoc = GET_LOC_BEFORE_END(Else);
+
+
+      if (smoothedBranch) {
+        nextBranchPos++;
+      }
+      
     }
 
     return true;
@@ -192,8 +241,6 @@ public:
       size_t found = FuncName.find("_DiscoGrad_");
       if (found != string::npos) {
         currSmoothFunctionIsVoid = !TypeStr.compare("void");
-        assert(!TypeStr.compare("void") || !TypeStr.compare("sdouble") || !TypeStr.compare("class sdouble")  ||
-                                           !TypeStr.compare("adouble") || !TypeStr.compare("class adouble"));
 
         currSmoothFunctionEndLoc = GET_LOC_END(FuncBody);
 

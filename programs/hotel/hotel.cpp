@@ -82,20 +82,20 @@ adouble _DiscoGrad_f(DiscoGrad<num_inputs> &_discograd, aparams &in) {
   const int start_time = -time_before;
   const int samples = 5;
 
-  sdouble booking_limits_base[num_products];
-  sdouble booking_limits[num_products];
+  adouble booking_limits_base[num_products];
+  adouble booking_limits[num_products];
   // note that limits should be capped at 100. This is not checked anymore and is to be ensured using the input parameters
   for (int i = 0; i < num_products; i++) {
-    booking_limits_base[i] = sdouble({in[i], _discograd.get_variance()});
+    booking_limits_base[i] = adouble(in[i]);
   }
 
   // run #samples times
-  sdouble mean_revenue = 0.0;
+  adouble mean_revenue = 0.0;
   for (int run_ind = 0; run_ind < samples; run_ind++) {
     for (int i = 0; i < num_products; i++)
       booking_limits[i] = booking_limits_base[i];
 
-    sdouble revenue({adouble(0.0), _discograd.get_variance()});
+    adouble revenue = 0;
     // starting arrival times
     double arrival_times[num_products];
     for (int i = 0; i < num_products; i++) {
@@ -138,13 +138,13 @@ adouble _DiscoGrad_f(DiscoGrad<num_inputs> &_discograd, aparams &in) {
       }
     }
 
-    printf("Revenue of run %d: %f\n", run_ind, revenue.expectation().val);
+    printf("Revenue of run %d: %f\n", run_ind, revenue.val);
     mean_revenue += revenue;
   }
 
   mean_revenue /= samples;
-  sdouble loss = -mean_revenue;
-  return loss.expectation();
+  adouble loss = -mean_revenue;
+  return loss;
 }
 
 int main(int argc, char **argv) {

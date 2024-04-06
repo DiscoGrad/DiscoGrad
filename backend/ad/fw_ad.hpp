@@ -1,38 +1,43 @@
-#pragma once
+/* Copyright 2023, 2024 Philipp Andelfinger, Justin Kreikemeyer
+  
+  Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+  and associated documentation files (the “Software”), to deal in the Software without
+  restriction, including without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+  Software is furnished to do so, subject to the following conditions:
+   
+    The above copyright notice and this permission notice shall be included in all copies or
+    substantial portions of the Software.
+    
+    THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+    INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+    PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+    ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+    ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE. */
 
-/** Operator-overloading implementation of forward-mode AD.
- *  Requires only a single pass by carrying along the adjoints for all program
- * inputs. Relies on the compiler for vectorization.
- *
- *  Copyright 2023 Philipp Andelfinger, Justin Kreikemeyer
- *
- *  Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the “Software”), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- *    The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- *    THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *    SOFTWARE.
+/** Operator-overloading implementation of forward-mode AD with basic sparsity optimizations.
+ *  Requires only a single pass by carrying along the tangents for all program inputs.
+ *  Relies on the compiler for vectorization.
  */
 
-#include <algorithm>
+#pragma once
+
 #include <assert.h>
-#include <cstdint>
-#include <iostream>
 #include <math.h>
 #include <stdio.h>
-#include <type_traits>
+#include <cstdint>
+#include <algorithm>
 #include <vector>
+#include <type_traits>
+#include <iostream>
+#include <unordered_set>
+#include "globals.hpp"
+
+#define TANG_POOL_SIZE 10000000
+
+extern uint64_t global_branch_id;
+extern bool in_branch;
 
 static constexpr int int_ceil(double x) {
   const int i = x;
@@ -49,106 +54,192 @@ template <typename T> T ipow(T x, int p) {
   return r;
 }
 
+double op_add(const double& a, const double& b) { return a + b; };
+double op_sub(const double& a, const double& b) { return a - b; };
+double op_mul(const double& a, const double& b) { return a * b; };
+double op_div(const double& a, const double& b) { return a / b; };
+
+template <typename T, int N, int M>
+struct svec {
+  double** items;
+  int size = 0;
+  svec() {
+    items = new double *[N + 1];
+    double *flat_pool = new double[N * M];
+    for (int i = 0; i < N; i++)
+      items[i] = &flat_pool[i * M];
+
+    size = N;
+  }
+
+  double *pop_back() {
+    assert(size > 0);
+    size--;
+    return items[size];
+  }
+
+  void push_back(double *p) {
+    items[size] = p;
+    size += !!p; // increment only if p is not nullptr
+  }
+};
+
 #ifdef ENABLE_AD
 #define ENABLE_AD_DEFAULT true
 #else
 #define ENABLE_AD_DEFAULT false
 #endif
 
-#define adouble_t fw_adouble<num_adj_, enable_ad_>
+#define adouble_t fw_adouble<num_tang_, enable_ad_>
 
-template <int num_adj_, bool enable_ad_ = ENABLE_AD_DEFAULT> class fw_adouble {
+template <int num_tang_, bool enable_ad_ = ENABLE_AD_DEFAULT> class fw_adouble {
 public:
-  static const int num_adjoints = num_adj_; // for external access
-  static const int min_adj_pool_size = 1024;
-  static std::vector<double *> adj_pool;
+  static const int num_tangents = num_tang_; // for external access
+  static svec<double *, TANG_POOL_SIZE, num_tang_> tang_pool;
+
+#if DGO_FORK_LIMIT != 0
+  static uint64_t set_counter; // for global ordering
+
+  pair<uint64_t, uint64_t> set_at = { initial_global_branch_id, 0 };
+#endif
 
   double val;
-  double *adj;
+  double *tang;
 
-  int single_adj_dim = -1;
-  double single_adj = 0.0;
+  int single_tang_dim = -1;
+  double single_tang = 0.0;
 
-  double *alloc_adj(bool init = false) {
-    if (adj_pool.empty())
-      for (int i = 0; i < min_adj_pool_size; i++)
-        adj_pool.push_back(new double[num_adj_]);
+#if DGO_FORK_LIMIT != 0
+  void mark_set() {
+    if (!enable_ad_ || branch_level == 0)
+      return;
 
-    double *r = adj_pool.back();
-    adj_pool.pop_back();
+    set_at = { global_branch_id, set_counter++ };
+  }
+
+  void mark_set(const adouble_t &other) {
+    if (!enable_ad_ || global_branch_id == initial_global_branch_id)
+      return;
+
+    if (branch_level == 0) {
+      set_at.first = set_at.second > other.set_at.second ? set_at.first : other.set_at.first;
+      set_at.second = set_counter++;
+      return;
+    }
+
+    set_at = { global_branch_id, set_counter++ };
+  }
+#else
+void mark_set() { return; }
+void mark_set(const adouble_t &other) { return; };
+#endif
+
+  double *alloc_tang(bool init = false) {
+    double *r = tang_pool.pop_back();
 
     if (init) {
-      for (int i = 0; i < num_adj_; i++)
+      for (int i = 0; i < num_tang_; i++)
         r[i] = 0.0;
     }
 
     return r;
   }
 
-  void clear_adj() {
-    assert(enable_ad_ || !adj);
-    if (adj) {
-      adj_pool.push_back(adj);
-      adj = nullptr;
-    }
-    single_adj_dim = -1;
-    single_adj = 0.0;
+  void clear_tang() {
+    if (!enable_ad_)
+      return;
+    single_tang_dim = -1;
+    single_tang = 0.0;
+
+    if (num_tang_ <= 1)
+      return;
+
+    tang_pool.push_back(tang); // tang == nullptr is handled in push_back()
+    tang = nullptr;
   }
 
   void init_val(double x) { val = x; };
 
-#define ITER_ADJ(ADJ_EXPR)                                                                                                                 \
-  for (int i = 0; enable_ad_ && i < num_adj_; i++) {                                                                                       \
-    r.adj[i] = ADJ_EXPR;                                                                                                                   \
+  void become(adouble_t &&other) {
+    val = other.val;
+
+    // XXX set_at not updated here because it's not needed for our use case
+
+    if (other.single_tang_dim != -1) {
+      single_tang_dim = other.single_tang_dim;
+      single_tang = other.single_tang;
+      return;
+    }
+
+    tang = other.tang;
+
+    other.tang = nullptr;
   }
 
   adouble_t &operator=(adouble_t &&other) {
     if (this == &other)
       return *this;
 
-    clear_adj();
+    clear_tang();
+
+    mark_set(other);
 
     val = other.val;
-    adj = other.adj;
-    other.adj = nullptr;
+    tang = other.tang;
+    other.tang = nullptr;
 
-    single_adj_dim = other.single_adj_dim;
-    single_adj = other.single_adj;
+    single_tang_dim = other.single_tang_dim;
+    single_tang = other.single_tang;
 
     return *this;
+  }
+
+#define ITER_TANG(TANG_EXPR)                                                                                                 \
+  for (int i = 0; enable_ad_ && i < num_tang_; i++) {                                                                        \
+    r.tang[i] = TANG_EXPR;                                                                                                   \
   }
 
   adouble_t &operator=(const adouble_t &other) {
     val = other.val;
 
-    clear_adj();
+    if (!enable_ad_)
+      return *this;
 
-    if (other.single_adj_dim != -1) {
-      single_adj_dim = other.single_adj_dim;
-      single_adj = other.single_adj;
+    clear_tang();
+
+    mark_set(other);
+
+    if (other.single_tang_dim != -1) {
+      single_tang_dim = other.single_tang_dim;
+      single_tang = other.single_tang;
       return *this;
     }
 
-    if (other.adj) {
-      init_full_adj();
+    if (num_tang_ > 1 && other.tang) {
+      init_full_tang();
       fw_adouble &r = *this;
-      ITER_ADJ(other.adj[i]);
+      ITER_TANG(other.tang[i]);
     }
 
     return *this;
   }
 
   fw_adouble(const fw_adouble &other) {
-    adj = nullptr;
-    single_adj_dim = -1;
-    single_adj = 0.0;
+    tang = nullptr;
+    single_tang_dim = -1;
+    single_tang = 0.0;
 
     *this = other;
+
+    mark_set(other);
   }
 
   adouble_t &operator=(double other) {
+    if (has_tang() || other != val)
+      mark_set();
+
     val = other;
-    clear_adj();
+    clear_tang();
 
     return *this;
   }
@@ -156,159 +247,183 @@ public:
   fw_adouble(double x) {
     val = x;
 
-    adj = nullptr;
-    single_adj_dim = -1;
-    single_adj = 0.0;
+    tang = nullptr;
+    single_tang_dim = -1;
+    single_tang = 0.0;
+
+    mark_set();
   }
 
-  fw_adouble() : fw_adouble(0.0) {}
+  fw_adouble() : fw_adouble(0.0) { }
 
-  ~fw_adouble() { clear_adj(); }
+  ~fw_adouble() {
+    if (!enable_ad_)
+      return;
+    clear_tang();
+  }
 
-  void init_full_adj(bool init = false) {
-    if (adj || !enable_ad_)
+  void init_full_tang(bool init = false, bool force = false) {
+    if (tang || (!enable_ad_ && !force))
       return;
 
-    adj = alloc_adj(init);
+    tang = alloc_tang(init);
 
-    if (single_adj_dim != -1) {
-      adj[single_adj_dim] = single_adj;
-      single_adj_dim = -1;
-      single_adj = 0.0;
+    if (single_tang_dim != -1) {
+      tang[single_tang_dim] = single_tang;
+      single_tang_dim = -1;
+      single_tang = 0.0;
     }
   }
 
   double get_val() const { return val; }
 
-  double get_adj(int k) const {
-    if (!enable_ad_)
-      return 0.0;
-
-    if (k == single_adj_dim) {
-      return single_adj;
+  double get_tang(int k) const {
+    if (k == single_tang_dim) {
+      return single_tang;
     }
 
-    return adj ? adj[k] : 0.0;
+    return tang ? tang[k] : 0.0;
   }
 
-  void set_initial_adj(int k, double a) {
+  void set_initial_tang(int k, double a) {
     if (!enable_ad_)
       return;
-    single_adj_dim = k;
-    single_adj = a;
+    single_tang_dim = k;
+    single_tang = a;
   }
 
-  void set_adj(int k, double a) {
+  void set_tang(int k, double a) {
     if (!enable_ad_)
       return;
 
-    init_full_adj(true);
+    init_full_tang(true);
 
-    adj[k] = a;
+    tang[k] = a;
   }
 
-  bool has_adj() const {
-    if (adj || single_adj_dim != -1)
-      return true;
-
-    return false;
-  }
+  bool has_tang() const { return tang != nullptr || single_tang_dim != -1; }
 
   adouble_t ipow(int p) const { return ::ipow(*this, p); }
 
-#define FW_ADOUBLE_BINARY_OP(OP, ADJ_EXPR_A_A, ADJ_EXPR_A_D)                                                                               \
-  adouble_t operator OP(const adouble_t &other) const {                                                                                    \
-    fw_adouble r;                                                                                                                          \
-    r.val = val OP other.val;                                                                                                              \
-    if (single_adj_dim != -1 && single_adj_dim == other.single_adj_dim) {                                                                  \
-      int i = single_adj_dim;                                                                                                              \
-      r.single_adj_dim = single_adj_dim;                                                                                                   \
-      r.single_adj = ADJ_EXPR_A_A;                                                                                                         \
-      return r;                                                                                                                            \
-    }                                                                                                                                      \
-    r.init_full_adj(true);                                                                                                                 \
-    ITER_ADJ(ADJ_EXPR_A_A);                                                                                                                \
-    return r;                                                                                                                              \
-  }                                                                                                                                        \
-  adouble_t operator OP(double other) const {                                                                                              \
-    fw_adouble r;                                                                                                                          \
-    r.val = val OP other;                                                                                                                  \
-    if (single_adj_dim != -1) {                                                                                                            \
-      int i = single_adj_dim;                                                                                                              \
-      r.single_adj_dim = single_adj_dim;                                                                                                   \
-      r.single_adj = ADJ_EXPR_A_D;                                                                                                         \
-      return r;                                                                                                                            \
-    }                                                                                                                                      \
-    r.init_full_adj(true);                                                                                                                 \
-    ITER_ADJ(ADJ_EXPR_A_D);                                                                                                                \
-    return r;                                                                                                                              \
+
+#define FW_ADOUBLE_BINARY_OP(OP, OP_CALL, TANG_EXPR_A_A, TANG_EXPR_A_D)                                                      \
+  adouble_t OP(const adouble_t &other) const {                                                                               \
+    fw_adouble r;                                                                                                            \
+    r.val = OP_CALL(val, other.val);                                                                                         \
+    r.mark_set(other);                                                                                                       \
+    if (!has_tang() && !other.has_tang())                                                                                    \
+      return r;                                                                                                              \
+                                                                                                                             \
+    bool only_one_tang_dim = ((!has_tang() && other.single_tang_dim != -1) || (!other.has_tang() && single_tang_dim != -1)); \
+    if (only_one_tang_dim || (single_tang_dim != -1 && other.single_tang_dim == single_tang_dim)) {                          \
+      int i = (single_tang_dim != -1) ? single_tang_dim : other.single_tang_dim;                                             \
+      r.single_tang_dim = i;                                                                                                 \
+      r.single_tang = TANG_EXPR_A_A;                                                                                         \
+      return r;                                                                                                              \
+    }                                                                                                                        \
+    r.init_full_tang(true);                                                                                                  \
+    ITER_TANG(TANG_EXPR_A_A);                                                                                                \
+    return r;                                                                                                                \
+  }                                                                                                                          \
+  adouble_t OP(double other) const {                                                                                         \
+    fw_adouble r;                                                                                                            \
+    r.val = OP_CALL(val, other);                                                                                             \
+    r.mark_set(*this);                                                                                                       \
+                                                                                                                             \
+    if (!has_tang())                                                                                                         \
+      return r;                                                                                                              \
+                                                                                                                             \
+    if (single_tang_dim != -1) {                                                                                             \
+      int i = single_tang_dim;                                                                                               \
+      r.single_tang_dim = single_tang_dim;                                                                                   \
+      r.single_tang = TANG_EXPR_A_D;                                                                                         \
+      return r;                                                                                                              \
+    }                                                                                                                        \
+    r.init_full_tang(true);                                                                                                  \
+    ITER_TANG(TANG_EXPR_A_D);                                                                                                \
+    return r;                                                                                                                \
   }
 
-#define FW_ADOUBLE_ASSIGN_OP(ASSIGN_OP, BINARY_OP, ADJ_EXPR_A_A, ADJ_EXPR_A_D)                                                             \
-  adouble_t operator ASSIGN_OP(const adouble_t &other) {                                                                                   \
-    fw_adouble &r = *this;                                                                                                                 \
-    if (single_adj_dim != -1 && single_adj_dim == other.single_adj_dim) {                                                                  \
-      int i = single_adj_dim;                                                                                                              \
-      r.single_adj_dim = single_adj_dim;                                                                                                   \
-      r.single_adj = ADJ_EXPR_A_A;                                                                                                         \
-      val ASSIGN_OP other.val;                                                                                                             \
-      return r;                                                                                                                            \
-    }                                                                                                                                      \
-    init_full_adj(true);                                                                                                                   \
-    ITER_ADJ(ADJ_EXPR_A_A);                                                                                                                \
-    val ASSIGN_OP other.val;                                                                                                               \
-    return *this;                                                                                                                          \
-  }                                                                                                                                        \
-  adouble_t operator ASSIGN_OP(double other) {                                                                                             \
-    if (!adj && single_adj_dim == -1) {                                                                                                    \
-      val ASSIGN_OP other;                                                                                                                 \
-      return *this;                                                                                                                        \
-    }                                                                                                                                      \
-    fw_adouble &r = *this;                                                                                                                 \
-    if (single_adj_dim != -1) {                                                                                                            \
-      int i = single_adj_dim;                                                                                                              \
-      r.single_adj_dim = single_adj_dim;                                                                                                   \
-      r.single_adj = ADJ_EXPR_A_D;                                                                                                         \
-    }                                                                                                                                      \
-    if (adj)                                                                                                                               \
-      ITER_ADJ(ADJ_EXPR_A_D);                                                                                                              \
-    val ASSIGN_OP other;                                                                                                                   \
-    return *this;                                                                                                                          \
+#define FW_ADOUBLE_ASSIGN_OP(ASSIGN_OP, BINARY_OP, TANG_EXPR_A_A, TANG_EXPR_A_D, ITER_TANG_EXPR_A_D)                         \
+  void operator ASSIGN_OP(const adouble_t &other) {                                                                          \
+    mark_set(other);                                                                                                         \
+    fw_adouble &r = *this;                                                                                                   \
+                                                                                                                             \
+    if (!has_tang() && !other.has_tang()) {                                                                                  \
+      val ASSIGN_OP other.val;                                                                                               \
+      return;                                                                                                                \
+    }                                                                                                                        \
+    bool only_one_tang_dim = ((!has_tang() && other.single_tang_dim != -1) || (!other.has_tang() && single_tang_dim != -1)); \
+    if (only_one_tang_dim || (single_tang_dim != -1 && other.single_tang_dim == single_tang_dim)) {                          \
+      int i = single_tang_dim != -1 ? single_tang_dim : other.single_tang_dim;                                               \
+      r.single_tang_dim = i;                                                                                                 \
+      r.single_tang = TANG_EXPR_A_A;                                                                                         \
+      val ASSIGN_OP other.val;                                                                                               \
+      return;                                                                                                                \
+    }                                                                                                                        \
+    init_full_tang(true);                                                                                                    \
+    ITER_TANG(TANG_EXPR_A_A);                                                                                                \
+    val ASSIGN_OP other.val;                                                                                                 \
+    return;                                                                                                                  \
+  }                                                                                                                          \
+  void operator ASSIGN_OP(double other) {                                                                                    \
+    mark_set();                                                                                                              \
+    if (!has_tang()) {                                                                                                       \
+      val ASSIGN_OP other;                                                                                                   \
+      return;                                                                                                                \
+    }                                                                                                                        \
+    fw_adouble &r = *this;                                                                                                   \
+    if (single_tang_dim != -1) {                                                                                             \
+      int i = single_tang_dim;                                                                                               \
+      r.single_tang_dim = single_tang_dim;                                                                                   \
+      r.single_tang = TANG_EXPR_A_D;                                                                                         \
+    }                                                                                                                        \
+    if (tang)                                                                                                                \
+      ITER_TANG_EXPR_A_D;                                                                                                    \
+    val ASSIGN_OP other;                                                                                                     \
+    return;                                                                                                                  \
   }
 
-#define OWN_ADJ (i == single_adj_dim ? single_adj : (adj ? adj[i] : 0.0))
-#define OTHER_ADJ (i == other.single_adj_dim ? other.single_adj : (other.adj ? other.adj[i] : 0.0))
+#define OWN_TANG (i == single_tang_dim ? single_tang : (tang ? tang[i] : 0.0))
+#define OTHER_TANG (i == other.single_tang_dim ? other.single_tang : (other.tang ? other.tang[i] : 0.0))
 
-#define ADD_ADJ (OWN_ADJ + OTHER_ADJ)
-#define SUB_ADJ (OWN_ADJ - OTHER_ADJ)
-#define MUL_ADJ (val * OTHER_ADJ + OWN_ADJ * other.val)
-#define DIV_ADJ ((OWN_ADJ * other.val - val * OTHER_ADJ) / (other.val * other.val))
+#define ADD_TANG (OWN_TANG + OTHER_TANG)
+#define SUB_TANG (OWN_TANG - OTHER_TANG)
+#define MUL_TANG (val * OTHER_TANG + OWN_TANG * other.val)
+#define DIV_TANG ((OWN_TANG * other.val - val * OTHER_TANG) / (other.val * other.val))
+#define ATAN2_TANG ((-OTHER_TANG * val + OWN_TANG * other.val) / ((val * val) + (other.val * other.val)))
 
-  FW_ADOUBLE_BINARY_OP(+, ADD_ADJ, OWN_ADJ);
-  FW_ADOUBLE_BINARY_OP(-, SUB_ADJ, OWN_ADJ);
-  FW_ADOUBLE_BINARY_OP(*, MUL_ADJ, OWN_ADJ *other);
-  FW_ADOUBLE_BINARY_OP(/, DIV_ADJ, OWN_ADJ / other);
+  FW_ADOUBLE_BINARY_OP(operator+, op_add, ADD_TANG, OWN_TANG);
+  FW_ADOUBLE_BINARY_OP(operator-, op_sub, SUB_TANG, OWN_TANG);
+  FW_ADOUBLE_BINARY_OP(operator*, op_mul, MUL_TANG, OWN_TANG * other);
+  FW_ADOUBLE_BINARY_OP(operator/, op_div, DIV_TANG, OWN_TANG / other);
 
-  FW_ADOUBLE_ASSIGN_OP(+=, +, ADD_ADJ, OWN_ADJ);
-  FW_ADOUBLE_ASSIGN_OP(-=, -, SUB_ADJ, OWN_ADJ);
-  FW_ADOUBLE_ASSIGN_OP(*=, *, MUL_ADJ, OWN_ADJ *other);
-  FW_ADOUBLE_ASSIGN_OP(/=, /, DIV_ADJ, OWN_ADJ / other);
+  FW_ADOUBLE_BINARY_OP(atan2, std::atan2, ATAN2_TANG, (OWN_TANG * other) / ((val * val) + (other * other)));
+
+  FW_ADOUBLE_BINARY_OP(powc, std::pow, assert(false), OWN_TANG * (other * std::pow(val, other - 1)));
+
+  FW_ADOUBLE_ASSIGN_OP(+=, +, ADD_TANG, OWN_TANG, ); // nothing to do here
+  FW_ADOUBLE_ASSIGN_OP(-=, -, SUB_TANG, OWN_TANG, ); // nothing to do here
+  FW_ADOUBLE_ASSIGN_OP(*=, *, MUL_TANG, OWN_TANG * other, ITER_TANG(OWN_TANG * other));
+  FW_ADOUBLE_ASSIGN_OP(/=, /, DIV_TANG, OWN_TANG / other, ITER_TANG(OWN_TANG / other));
 
   adouble_t operator-() const {
     fw_adouble r;
     r.val = -val;
 
-    if (!has_adj())
+    r.mark_set(*this);
+
+    if (!has_tang())
       return r;
 
-    if (single_adj_dim != -1) {
-      r.single_adj_dim = single_adj_dim;
-      r.single_adj = -single_adj;
+    if (single_tang_dim != -1) {
+      r.single_tang_dim = single_tang_dim;
+      r.single_tang = -single_tang;
       return r;
     }
 
-    r.init_full_adj(true);
-    ITER_ADJ(-OWN_ADJ);
+    r.init_full_tang(true);
+    ITER_TANG(-OWN_TANG);
 
     return r;
   }
@@ -330,59 +445,86 @@ public:
   explicit operator int() { return (int)val; }
 };
 
-template <int num_adj_, bool enable_ad_> bool operator<(double lhs, const adouble_t &rhs) { return rhs > lhs; };
-template <int num_adj_, bool enable_ad_> bool operator<=(double lhs, const adouble_t &rhs) { return rhs >= lhs; };
-template <int num_adj_, bool enable_ad_> bool operator>(double lhs, const adouble_t &rhs) { return rhs < lhs; };
-template <int num_adj_, bool enable_ad_> bool operator>=(double lhs, const adouble_t &rhs) { return rhs <= lhs; };
-template <int num_adj_, bool enable_ad_> bool operator==(double lhs, const adouble_t &rhs) { return rhs == lhs; }
-template <int num_adj_, bool enable_ad_> bool operator!=(double lhs, const adouble_t &rhs) { return rhs != lhs; }
+template <int num_tang_, bool enable_ad_> bool operator<(double lhs, const adouble_t &rhs) { return rhs > lhs; };
+template <int num_tang_, bool enable_ad_> bool operator<=(double lhs, const adouble_t &rhs) { return rhs >= lhs; };
+template <int num_tang_, bool enable_ad_> bool operator>(double lhs, const adouble_t &rhs) { return rhs < lhs; };
+template <int num_tang_, bool enable_ad_> bool operator>=(double lhs, const adouble_t &rhs) { return rhs <= lhs; };
+template <int num_tang_, bool enable_ad_> bool operator==(double lhs, const adouble_t &rhs) { return rhs == lhs; }
+template <int num_tang_, bool enable_ad_> bool operator!=(double lhs, const adouble_t &rhs) { return rhs != lhs; }
 
-template <int num_adj_, bool enable_ad_> std::vector<double *> adouble_t::adj_pool;
+#if DGO_FORK_LIMIT != 0
+template <int num_tang_, bool enable_ad_> uint64_t adouble_t::set_counter = 1;
+#endif
 
-template <int num_adj_, bool enable_ad_> adouble_t operator+(double lhs, const adouble_t &rhs) { return rhs + lhs; }
-template <int num_adj_, bool enable_ad_> adouble_t operator-(double lhs, const adouble_t &rhs) { return -rhs + lhs; }
-template <int num_adj_, bool enable_ad_> adouble_t operator*(double lhs, const adouble_t &rhs) { return rhs * lhs; }
-template <int num_adj_, bool enable_ad_> adouble_t operator/(double lhs, const adouble_t &rhs) {
+template <int num_tang_, bool enable_ad_> adouble_t operator+(double lhs, const adouble_t &rhs) { return rhs + lhs; }
+template <int num_tang_, bool enable_ad_> adouble_t operator-(double lhs, const adouble_t &rhs) {
   adouble_t r;
-  r.val = lhs / rhs.val;
+  r.val = lhs - rhs.val;
 
-  if (!rhs.has_adj())
+  if (!rhs.has_tang())
     return r;
 
-  if (rhs.single_adj_dim != -1) {
-    r.single_adj_dim = rhs.single_adj_dim;
-    r.single_adj = -lhs * rhs.single_adj / (rhs.val * rhs.val);
+  if (rhs.single_tang_dim != -1) {
+    r.single_tang_dim = rhs.single_tang_dim;
+    r.single_tang = -rhs.single_tang;
     return r;
   }
 
-  r.init_full_adj();
-  ITER_ADJ(-lhs * rhs.adj[i] / (rhs.val * rhs.val));
+  r.init_full_tang();
+  ITER_TANG(-rhs.tang[i]);
   return r;
 }
 
-#define FW_ADOUBLE_UNARY_OP(FUNC, ADJ_EXPR)                                                                                                \
-  template <int num_adj_, bool enable_ad_> adouble_t FUNC(const adouble_t &x) {                                                            \
-    adouble_t r;                                                                                                                           \
-    r.val = FUNC(x.val);                                                                                                                   \
-    if (x.single_adj_dim != -1) {                                                                                                          \
-      int i = x.single_adj_dim;                                                                                                            \
-      r.single_adj_dim = i;                                                                                                                \
-      r.single_adj = ADJ_EXPR;                                                                                                             \
-      return r;                                                                                                                            \
-    }                                                                                                                                      \
-    if (x.adj) {                                                                                                                           \
-      r.init_full_adj();                                                                                                                   \
-      ITER_ADJ(ADJ_EXPR);                                                                                                                  \
-    }                                                                                                                                      \
-    return r;                                                                                                                              \
+template <int num_tang_, bool enable_ad_> adouble_t operator*(double lhs, const adouble_t &rhs) { return rhs * lhs; }
+template <int num_tang_, bool enable_ad_> adouble_t operator/(double lhs, const adouble_t &rhs) {
+  adouble_t r;
+  r.val = lhs / rhs.val;
+
+  if (!rhs.has_tang())
+    return r;
+
+  if (rhs.single_tang_dim != -1) {
+    r.single_tang_dim = rhs.single_tang_dim;
+    r.single_tang = -lhs * rhs.single_tang / (rhs.val * rhs.val);
+    return r;
   }
 
-#define UNARY_OWN_ADJ (i == x.single_adj_dim ? x.single_adj : x.adj[i])
+  r.init_full_tang();
+  ITER_TANG(-lhs * rhs.tang[i] / (rhs.val * rhs.val));
+  return r;
+}
 
-FW_ADOUBLE_UNARY_OP(exp, exp(x.val) * UNARY_OWN_ADJ);
-FW_ADOUBLE_UNARY_OP(sin, cos(x.val) * UNARY_OWN_ADJ);
-FW_ADOUBLE_UNARY_OP(cos, -sin(x.val) * UNARY_OWN_ADJ);
-FW_ADOUBLE_UNARY_OP(sqrt, (1.0 / (2.0 * sqrt(x.val))) * UNARY_OWN_ADJ);
-FW_ADOUBLE_UNARY_OP(log, (1.0 / x.val) * UNARY_OWN_ADJ);
-FW_ADOUBLE_UNARY_OP(erf, (2.0 * exp(-(x.val * x.val)) / sqrt(M_PI)) * UNARY_OWN_ADJ);
-FW_ADOUBLE_UNARY_OP(tanh, ipow(1 - tanh(x.val), 2) * UNARY_OWN_ADJ);
+#define FW_ADOUBLE_UNARY_OP(FUNC, TANG_EXPR)                                                                                 \
+  template <int num_tang_, bool enable_ad_> adouble_t FUNC(const adouble_t &x) {                                             \
+    adouble_t r;                                                                                                             \
+    r.val = FUNC(x.val);                                                                                                     \
+    r.mark_set(x);                                                                                                           \
+    if (x.single_tang_dim != -1) {                                                                                           \
+      int i = x.single_tang_dim;                                                                                             \
+      r.single_tang_dim = i;                                                                                                 \
+      r.single_tang = TANG_EXPR;                                                                                             \
+      return r;                                                                                                              \
+    }                                                                                                                        \
+    if (x.tang) {                                                                                                            \
+      r.init_full_tang();                                                                                                    \
+      ITER_TANG(TANG_EXPR);                                                                                                  \
+    }                                                                                                                        \
+    return r;                                                                                                                \
+  }
+
+#define UNARY_OWN_TANG (i == x.single_tang_dim ? x.single_tang : x.tang[i])
+
+FW_ADOUBLE_UNARY_OP(exp, r.val * UNARY_OWN_TANG); // r.val == exp(x.val)
+FW_ADOUBLE_UNARY_OP(sin, cos(x.val) * UNARY_OWN_TANG);
+FW_ADOUBLE_UNARY_OP(cos, -sin(x.val) * UNARY_OWN_TANG);
+FW_ADOUBLE_UNARY_OP(sqrt, (1.0 / (2.0 * r.val)) * UNARY_OWN_TANG); // r.val == sqrt(x.val)
+FW_ADOUBLE_UNARY_OP(log, (1.0 / x.val) * UNARY_OWN_TANG);
+FW_ADOUBLE_UNARY_OP(erf, (2.0 * exp(-(x.val * x.val)) / sqrt(M_PI)) * UNARY_OWN_TANG);
+FW_ADOUBLE_UNARY_OP(tanh, ipow(1 - r.val, 2) * UNARY_OWN_TANG); // r.val == tanh(x.val)
+
+template <int num_tang_, bool enable_ad_> adouble_t atan2(const adouble_t &a, const adouble_t &b) { return a.atan2(b); }
+template <int num_tang_, bool enable_ad_> adouble_t powc(const adouble_t &a, const double b) { return a.powc(b); }
+template <int num_tang_, bool enable_ad_> svec<double *, TANG_POOL_SIZE, num_tang_> adouble_t::tang_pool;
+
+typedef fw_adouble<num_inputs> adouble;
+
