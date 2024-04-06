@@ -7,6 +7,8 @@ DiscoGrad automatically transforms C++ programs to a version that efficiently ca
 
 The repository includes a number of sample applications from domains such as transportation, crowd management, and epidemiology.
 
+[DiscoGrad Use Cases](https://github.com/philipp-andelfinger/DiscoGrad/assets/59713878/6419fccf-1e20-4a2c-8fef-854197824b15)
+
 [Brief video description of DiscoGrad](https://github.com/philipp-andelfinger/DiscoGrad/assets/17525874/12851797-847b-4757-ad15-8387b21cf200)
 
 ## 💾 Installation
