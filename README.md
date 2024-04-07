@@ -13,11 +13,11 @@ The repository includes a number of sample applications from domains such as tra
 
 ## 💾 Installation
 
-Tested on `Ubuntu 22.04.4 LTS` and `Arch Linux`
+Tested on `Ubuntu 22.04.4 LTS`, `Arch Linux` and `Fedora 38 Workstation`
 
 To compile the transformation code, you need the following packages (or their analogues provided by your Linux distribution):
-- `clang`, `clang-devel`
-- `llvm`, `llvm-devel`
+- `clang`, `clang-devel` (version 13 or higher)
+- `llvm`, `llvm-devel` (version 13 or higher)
 - `cmake`
 
 ```
@@ -38,21 +38,21 @@ discograd$ ./smooth_compile programs/hello_world/hello_world.cpp
 
 AD on the original (crisp) C++ program yields a 0 derivative:
 ```shell
-discograd$ echo 0.0 | ./programs/hello_world/hello_world_crisp_ad
+DiscoGrad$ echo 0.0 | ./programs/hello_world/hello_world_crisp_ad --var 0.0 --ns 1
 expectation: 1
 derivative: 0
 ```
 
 Our estimator DiscoGrad Gradient Oracle (DGO) calculates a non-zero derivative useful for optimization:
 ```shell
-discograd$ echo 0.0 | ./programs/hello_world/hello_world_dgo --var 0.25
-expectation: 0.5
-derivative: -0.7978845608
+DiscoGrad$ echo 0.0 | ./programs/hello_world/hello_world_dgo --var 0.25 --ns 1000
+expectation: 0.527
+derivative: -0.7939109206
 ```
 
 You can run `./programs/hello_world/hello_world_{crisp,dgo,pgo,reinforce} -h` for CLI usage information.
 
-## Usage
+## ❔Usage
 
 ### Use of the DiscoGrad API
 
@@ -127,7 +127,7 @@ Note: When all branches occur directly on discrete random variables drawn from d
 - Boris T Polyak. "Introduction to optimization." 1987. (Chapter 3.4.2)
 - Nesterov, Yurii, and Vladimir Spokoiny. "Random gradient-free minimization of convex functions." Foundations of Computational Mathematics 17 (2017): 527-566.
 
-## License
+## ⚖️ License
 
 This project is licensed under the MIT License.
 The DiscoGrad tool includes some parts from third parties, which are licensed as follows:
@@ -136,10 +136,6 @@ The DiscoGrad tool includes some parts from third parties, which are licensed as
 - `backend/discograd_gradient_oracle/kdepp.hpp`, MIT license
 - `backend/args.{h,cpp}`, MIT license
 - Doxygen Awesome theme, MIT license
-
-Additionally we include the following code for use by optimization experiment scripts:
-- `pyeasyga.py`, BSD-3-Clause license
-- `pyswarms_optimizers.py`, MIT license
 
 ## 📄 Cite
 

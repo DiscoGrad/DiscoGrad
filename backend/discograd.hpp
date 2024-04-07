@@ -100,7 +100,7 @@ protected:
   void print_results() const {
     printf("estimation_duration: %ldus, %.2fs\n", estimate_duration_us, estimate_duration_us * 1e-6);
     printf("expectation: %.10g\n", expectation());
-    printf("lowest: %.10g\n", lowest_val());
+    //printf("lowest: %.10g\n", lowest_val());
 #if not defined CRISP or defined ENABLE_AD
     for (int dim = 0; dim < num_inputs; ++dim)
       printf("derivative: %.10g\n", derivative(dim));

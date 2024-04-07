@@ -36,7 +36,7 @@ int main(int argc, char **argv)
   // additional configuration options, such as the smoothing variance, are read from the cli arguments.
   DiscoGrad<num_inputs> dg(argc, argv, false);
   // instantiate the program wrapper for the heaviside function
-  //HelloSmoothing prog;
+  //HelloSmoothing func;
   DiscoGradFunc<num_inputs> func(_DiscoGrad_heaviside);
 
   // estimate or calculate output and gradient
