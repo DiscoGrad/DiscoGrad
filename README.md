@@ -9,7 +9,7 @@ The repository includes a number of sample applications from domains such as tra
 
 [DiscoGrad Use Cases](https://github.com/philipp-andelfinger/DiscoGrad/assets/59713878/6419fccf-1e20-4a2c-8fef-854197824b15)
 
-[Brief video description of DiscoGrad](https://github.com/philipp-andelfinger/DiscoGrad/assets/59713878/22ff7dac-8e68-4442-ae60-799d42e603fc)
+[Illustration of DiscoGrad](https://github.com/philipp-andelfinger/DiscoGrad/assets/59713878/8fe0fe01-4325-4c0b-be1c-282cd0797c75)
 
 ## 💾 Installation
 
