@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.10288017.svg)](https://doi.org/10.5281/zenodo.10288017)
+
 # DiscoGrad
 *Automatically differentiate across conditional control flow of C++ programs.* 
 
