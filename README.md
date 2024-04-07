@@ -74,7 +74,7 @@ adouble _DiscoGrad_my_function(DiscoGrad& _dg, aparams p) {
   return output;
 }
 ```
-3. In the main function, interface with the DiscoGrad API by creating an instance of the `DiscoGrad` class and a wrapper for your smooth function. Call `.estimate(func)` on the DiscoGrad instance to invoke the backend-specific gradient estimator.
+3. In the main function, create an instance of the `DiscoGrad` class and a wrapper for your smooth function. Call `.estimate(func)` on the DiscoGrad instance to invoke the backend-specific gradient estimator.
 ```c++
 int main(int argc, char** argv) {
   // interface with backend and provide the CLI arguments, such as the variance
@@ -83,30 +83,6 @@ int main(int argc, char** argv) {
   DiscoGradFunc<num_inputs> func(_DiscoGrad_my_function);  
   // call the estimate function of the backend (chosen during compilation)
   dg.estimate(func);
-}
-```
-
-### Including Additional Variables in Smooth Functions
-
-To include additional variables besides the inputs (`aparams`), you need to wrap your function in a class that implements the `DiscoGradProgram` interface. The only requirement for this class is that it implements the `adouble run(DiscoGrad&, aparams&)` method. See `programs/ac` for a simple and `programs/epidemics` for a more elaborate example. Here is an example that replaces steps 2 and 3 above: 
-```c++
-class MyProgram : public DiscoGradProgram<num_inputs> {
-public:
-  // a parameter wrt. which we do not want to differentiate
-  double non_input_parameter;
-  MyProgram(double _non_input_parameter) {
-    non_input_parameter = _non_input_parameter;
-  }
-  // implement the DiscoGradProgram interface, so that dg.estimate knows what to do
-  adouble run(DiscoGrad<num_inputs> &_discograd, aparams &p) {
-    return _DiscoGrad_f(_discograd, p, non_input_parameter);
-  }
-};
-
-int main(int argc, char** argv) {
-  DiscoGrad<num_inputs> dg(argc, argv);
-  MyProgram prog(0.42); 
-  dg.estimate(prog);
 }
 ```
 
