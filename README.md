@@ -1,5 +1,5 @@
 # DiscoGrad
-*Automatically differentiate across conditional control flow of C++ programs.* 
+*Automatically differentiate across conditional branches in C++ programs.* 
 
 Automatic Differentiation (AD) is a popular method to obtain the gradients of computer programs, which are extremely useful for adjusting program parameters using gradient descent to solve optimization, control, and inference problems. Unfortunately, AD alone often yields unhelpful (zero-valued and/or biased) gradients for programs involving both parameter-dependent branching control flow such as if-else statements and randomness, including various types of simulations.
 
