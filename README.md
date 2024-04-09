@@ -115,7 +115,7 @@ This is an overview of all the current backends. More detailed explanations can 
 | -----------------|--------------------------------------------------------------------------------
 | crisp            | The original program with optional input perturbations and AD
 | dgo              | DiscoGrad Gradient Oracle, DiscoGrad's own gradient estimator based on automatic differentiation and Monte Carlo sampling.     
-| pgo              | Polyak's Gradient-Free Oracle presented by Polyak and further analysed by Nesterov et. al. 
+| pgo              | Polyak's Gradient-Free Oracle presented by Polyak and further analysed by Nesterov et al. 
 | reinforce        | Application of REINFORCE to programs with artificially introduced Gaussian randomness.
 
 Additionally, an implementation of gradient estimation via Chaudhuri and Solar-Lezama's method of Smooth Interpretation can be found in the branch 'discograd_ieee_access'.
