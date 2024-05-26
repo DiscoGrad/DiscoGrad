@@ -2,7 +2,7 @@
 
 > Trying to do gradient descent using automatic differentiation over branchy programs?
 Or to combine them with neural networks for end-to-end training?
-Then this might be interesting for you.
+Then this might be interesting to you.
 
 Automatic Differentiation (AD) is a popular method to obtain the gradients of computer programs, which are extremely useful for adjusting program parameters using gradient descent to solve optimization, control, and inference problems. Unfortunately, AD alone often yields unhelpful (zero-valued and/or biased) gradients for programs involving both parameter-dependent branching control flow such as if-else statements and randomness, including various types of simulations.
 
