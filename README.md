@@ -155,3 +155,16 @@ The DiscoGrad tool includes some parts from third parties, which are licensed as
      doi={10.1109/ACCESS.2023.3342136}
 }
 ```
+
+An alternative derivation of the DGO estimator can be found in:
+
+```
+@misc{andelfinger2024automatic,
+      title={Automatic Gradient Estimation for Calibrating Crowd Models with Discrete Decision Making}, 
+      author={Philipp Andelfinger and Justin N. Kreikemeyer},
+      year={2024},
+      eprint={2404.04678},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
