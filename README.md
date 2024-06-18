@@ -168,3 +168,7 @@ An alternative derivation of the DGO estimator can be found in:
       primaryClass={cs.LG}
 }
 ```
+
+## Acknowledgement
+
+This work was supported by Deutsche Forschungsgemeinschaft (DFG), German Research Foundation, under Grant 497901036.
