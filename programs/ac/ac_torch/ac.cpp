@@ -163,10 +163,10 @@ adouble _DiscoGrad_f(DiscoGrad<num_inputs> &_discograd, array<adouble, num_input
 class NNThermostat : public DiscoGradProgram<num_inputs> {
 public:
   double init_temp;
-  NNThermostat(double init_temp) {
+  NNThermostat(DiscoGrad<num_inputs>& _discograd, double init_temp) : DiscoGradProgram<num_inputs>(_discograd) {
     this->init_temp = init_temp;
   }
-  adouble run(DiscoGrad<num_inputs> &_discograd, array<adouble, num_inputs> &p) {
+  adouble run(array<adouble, num_inputs> &p) {
     return _DiscoGrad_f(_discograd, p, init_temp); 
   }
 };
@@ -174,7 +174,7 @@ public:
 int main(int argc, char **argv)
 {
   DiscoGrad<num_inputs> dg(argc, argv);
-  NNThermostat prog(20.0);
+  NNThermostat prog(dg, 20.0);
   dg.estimate(prog);
 
   return 0;

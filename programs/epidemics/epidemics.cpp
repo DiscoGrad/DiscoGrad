@@ -383,7 +383,7 @@ private:
   Hist ref_states[endTime][nLocs];
   Hist out_states[endTime][nLocs];
 public:
-  Epidemics() {
+  Epidemics(DiscoGrad<num_inputs>& _discograd) : DiscoGradProgram<num_inputs>(_discograd) {
     // load reference trajectory (= data for calibration) and prepare output trajectory
     printf_debug("nLocs: %d\n", nLocs);
     for (int t = 0; t < endTime; t++) {
@@ -399,7 +399,7 @@ public:
     // load network environment
     load_network(nLocs);
   }
-  adouble run(DiscoGrad<num_inputs> &_discograd, array<adouble, num_inputs> &p) {
+  adouble run(array<adouble, num_inputs> &p) {
     nRuns++;
     // execute (smoothed) simulation and update states
     Hist buff_states[endTime][nLocs];
@@ -443,7 +443,7 @@ int main(int argc, char **argv)
   exec_path = filesystem::path(argv[0]).parent_path().generic_string();
 
   DiscoGrad<num_inputs> dg(argc, argv);
-  Epidemics prog;
+  Epidemics prog(dg);
   dg.estimate(prog);
   prog.write_output();
   return 0;

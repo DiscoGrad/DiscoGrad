@@ -34,12 +34,12 @@ public:
 
   void estimate_(DiscoGradProgram<num_inputs> &program) {
     this->sampling_rng.seed(random_device()());
-    for (int rep = 0; rep < this->num_replications; ++rep) {
+    for (uint64_t rep = 0; rep < this->num_replications; ++rep) {
 
       if (!this->rs_mode)
         this->current_seed = this->seed_dist(this->rep_seed_gen);
 
-      for (int sample = 0; sample < this->num_samples; sample++) {
+      for (uint64_t sample = 0; sample < this->num_samples; sample++) {
         if (this->rs_mode)
           this->current_seed = this->seed_dist(this->rep_seed_gen);
 
@@ -59,12 +59,10 @@ public:
 
         this->rng.seed(this->current_seed);
 
-        adouble r = program.run(*this, pm_perturbed);
+        adouble r = program.run(pm_perturbed);
         this->exp_val += r;
-
-        this->lowest_sample_val = min(this->lowest_sample_val, r.val);
       }
     }
-    this->exp_val = this->exp_val / this->num_replications / this->num_samples;
+    this->exp_val /= this->num_replications * this->num_samples;
   }
 };

@@ -42,13 +42,7 @@ using namespace std;
 
 const bool print_debug = false;
 
-unordered_map<string, vector<string>> directCallees;
-unordered_map<string, vector<string>> callGraph;
-
-unordered_map<string, vector<int>> funcDirectSmoothBranches;
 unordered_map<string, vector<int>> funcTransitiveSmoothBranches;
-
-uint64_t max_branch_pos = 0;
 
 static cl::OptionCategory ToolCategory("Smooth");
 Rewriter rewriter;
@@ -84,6 +78,7 @@ public:
   void collectCalledFuncs(Stmt *stmt, vector<string>& funcNames) {
     if (stmt == nullptr)
       return;
+
     if (isa<CXXMemberCallExpr>(stmt)) {
       CXXMemberCallExpr *e = cast<CXXMemberCallExpr>(stmt);
       if (isa<CXXMethodDecl>(e->getCalleeDecl())) {
@@ -109,69 +104,6 @@ public:
         return true;
     }
     return false;
-  }
-
-  uint64_t countNestedIfs(Stmt *stmt) {
-    if (stmt == nullptr) {
-      return 0;
-    }
-
-    uint64_t count = 0;
-    if (isa<IfStmt>(stmt)) {
-      IfStmt *If = cast<IfStmt>(stmt);
-      Expr *Cond = If->getCond();
-      auto CondText = rewriter.getRewrittenText(Cond->getSourceRange());
-
-      string unhandledOps[] = { "||", "&&", "==", "!=" };
-
-      bool skip = false;
-      for (auto &op : unhandledOps) {
-        if (CondText.find(op) != string::npos) {
-          skip = true;
-          break;
-        }
-      }
-      
-      if (!skip && needsSmoothing(Cond))
-        count++;
-    }
-    for (auto it = stmt->children().begin(); it != stmt->children().end(); it++) {
-      count += countNestedIfs(*it);
-    }
-    return count;
-  }
-
-  bool crispUpToOutermostLoop(Stmt *stmt) {
-    DynTypedNodeList parents = Context->getParents(*stmt);
-    while (!parents.empty()) {
-      const Stmt *p = parents[0].get<Stmt>();
-      if (!p)
-        break;
-      if (SmoothIfElseBodies.contains(p))
-        return false;
-      if (LoopBodies.contains(p))
-        return !SmoothLoopBodies.contains(p);
-
-      parents = Context->getParents(*p);
-    }
-    assert(false);
-  }
-
-  std::string removeParen(const std::string in) {
-    if (in[0] != '(' || in[in.size() - 1] != ')')
-      return in;
-
-    for (int num_open = 1, i = 1; i < in.size(); i++) {
-      if (in[i] == '(')
-        num_open++;
-      if (in[i] == ')')
-        num_open--;
-
-      if (num_open == 0 && i < in.size() - 1)
-        return in;
-    }
-
-    return in.substr(1, in.size() - 2);
   }
 
   bool VisitStmt(Stmt *s) {
@@ -207,11 +139,6 @@ public:
           if (CondText.find(op) != string::npos)
             skip = true;
 
-        if (CondText.starts_with("_abl_dist <= ") && CondText.ends_with(" + radiusTol"))
-          skip = true;
-        if (CondText.starts_with("crisp_") && CondText.ends_with(" + radiusTol"))
-          skip = true;
-
         if (!skip) {
           string leCmps[] = { "<=", "<" };
           for (const string& cmpOp : leCmps) {
@@ -223,72 +150,55 @@ public:
             }
           }
 
-          auto InnerCondText = CondText;
-          std::string OuterCondText;
-          do {
-            OuterCondText = InnerCondText;
-            InnerCondText = removeParen(OuterCondText);
-            //std::cerr << "outer cond text: " << OuterCondText << std::endl;
-            //std::cerr << "inner cond text: " << InnerCondText << std::endl;
-          } while (InnerCondText != OuterCondText);
-          CondText = InnerCondText;
-
           auto geCmps = { ">=", ">" };
           for (const string& cmpOp : geCmps) {
             auto cmpPos = CondText.find(cmpOp);
-            // handle the dereferencing member access operator ->
-            // (skip every > that is preceeded by a -; note that this prohibits the use of a-->b for now)
-            while (cmpPos != string::npos && cmpOp == ">" && CondText[cmpPos - 1] == '-') {
-              auto newPos = CondText.substr(cmpPos + cmpOp.length()).find(cmpOp);
-              if (newPos != string::npos) {
-                cmpPos += newPos + 1;
-              } else {
-                cmpPos = string::npos;
-                break;
-              }
-            }
             if (cmpPos != string::npos) {
               CondText = CondText.substr(cmpPos + cmpOp.length()) + "- (" + CondText.substr(0, cmpPos) + ")";
               smoothedBranch = true;
             }
           }
 
-          if (smoothedBranch) {
-            auto condVarName = "_discograd_cond_" + to_string(nextBranchPos);
-            rewriter.InsertText(If->getBeginLoc(), "\nadouble " + condVarName + " = " + CondText + ";\n"); 
-            auto endBlockLoc = GET_LOC_BEFORE_END(Else);
-            rewriter.InsertText(If->getBeginLoc(), "\n_discograd.prepare_branch(" + to_string(nextBranchPos) + ", " + condVarName + ");\n"); 
-            rewriter.InsertText(Cond->getBeginLoc(), condVarName + " < 0.0 /*"); 
-            rewriter.InsertText(GET_LOC_BEFORE_END(Cond), " */"); 
+          //if (smoothedBranch) {
+          //  auto condVarName = "_discograd_cond_" + to_string(nextBranchPos);
+          //  rewriter.InsertText(If->getBeginLoc(), "\nadouble " + condVarName + " = " + CondText + ";\n"); 
+          //  auto endBlockLoc = GET_LOC_BEFORE_END(Else);
+          //  rewriter.InsertText(If->getBeginLoc(), "\n_discograd.prepare_branch(" + to_string(nextBranchPos) + ", " + condVarName + ");\n"); 
+          //  rewriter.InsertText(Cond->getBeginLoc(), condVarName + " < 0.0 /*"); 
+          //  rewriter.InsertText(GET_LOC_BEFORE_END(Cond), " */"); 
 
-            rewriter.InsertText(endBlockLoc, "\n_discograd.end_block();\n");
-
-            funcDirectSmoothBranches[currFuncName].push_back(nextBranchPos);
-
-            max_branch_pos = std::max(max_branch_pos, nextBranchPos);
-          }
+          //  rewriter.InsertText(endBlockLoc, "\n_discograd.end_block();\n");
+          //}
         }
       }
 
       Stmt *Then = If->getThen();
-      vector<uint64_t> thenBranchPositions;
-      vector<uint64_t> elseBranchPositions;
-      uint64_t thenIfs = countNestedIfs(Then);
-      uint64_t elseIfs = countNestedIfs(Else);
+      //vector<uint64_t> thenBranchPositions;
+      //vector<uint64_t> elseBranchPositions;
+      //uint64_t thenIfs = countNestedIfs(Then);
+      //uint64_t elseIfs = countNestedIfs(Else);
 
-      uint64_t bpos = nextBranchPos + smoothedBranch;
-      for (int i = 0; i < thenIfs; i++) {
-        rewriter.InsertText(Else->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
-        bpos++;
-      }
-      for (int i = 0; i < elseIfs; i++) {
-        rewriter.InsertText(Then->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
-        bpos++;
-      }
+      //uint64_t bpos = nextBranchPos + smoothedBranch;
+      //for (int i = 0; i < thenIfs; i++) {
+      //  rewriter.InsertText(Else->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
+      //  bpos++;
+      //}
+      //for (int i = 0; i < elseIfs; i++) {
+      //  rewriter.InsertText(Then->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
+      //  bpos++;
+      //}
 
       vector<string> thenCalledFuncs, elseCalledFuncs;
       collectCalledFuncs(Then, thenCalledFuncs);
       collectCalledFuncs(Else, elseCalledFuncs);
+
+      for (auto& f : thenCalledFuncs)
+        for (auto bpos : funcTransitiveSmoothBranches[f])
+          rewriter.InsertText(Else->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
+
+      for (auto& f : elseCalledFuncs)
+        for (auto bpos : funcTransitiveSmoothBranches[f])
+          rewriter.InsertText(Then->getBeginLoc().getLocWithOffset(1), "\n_discograd.inc_branch_visit(" + to_string(bpos) + ");\n");
 
       auto endBlockLoc = GET_LOC_BEFORE_END(Else);
 
@@ -300,22 +210,6 @@ public:
     
 
     return true;
-  }
-
-  vector<string> collectRecursiveCallees(string func, set<string> seenFuncs = {}) {
-    vector<string> recursiveCallees;
-    seenFuncs.insert(func);
-    for (auto &c : directCallees[func]) {
-      if (seenFuncs.contains(c)) {
-        cerr << "Call graph contains cycle, not supported yet." << endl;
-        exit(1);
-      }
-      recursiveCallees.push_back(c);
-      auto cCallees = collectRecursiveCallees(c, seenFuncs);
-      for (auto &cc : cCallees)
-        recursiveCallees.push_back(cc);
-    }
-    return recursiveCallees;
   }
 
   bool VisitFunctionDecl(FunctionDecl *f) {
@@ -338,10 +232,6 @@ public:
         currSmoothFunctionEndLoc = GET_LOC_END(FuncBody);
         
         currFuncName = FuncName;
-        collectCalledFuncs(FuncBody, directCallees[FuncName]);
-
-        for (auto &item : directCallees)
-          callGraph[item.first] = collectRecursiveCallees(item.first);
 
         SmoothFuncBodies.insert(FuncBody);
      }
@@ -384,27 +274,17 @@ int main(int argc, const char **argv) {
   }
   ClangTool Tool(op->getCompilations(), op->getSourcePathList());
 
+  string inFname = op->getSourcePathList()[0];
+  string smoothBranchesFname = inFname.substr(0, inFname.length() - strlen("smoothed.cpp")) + "smoothBranches.bin";
+
+  funcTransitiveSmoothBranches = deserialize(smoothBranchesFname);
+
   int r = Tool.run(newFrontendActionFactory<SmoothAction>().get());
 
   const RewriteBuffer *RewriteBuf =
       rewriter.getRewriteBufferFor(rewriter.getSourceMgr().getMainFileID());
   assert(RewriteBuf);
-  cout << "const int _discograd_max_branch_pos = " << max_branch_pos << ";" << std::endl << std::endl;
   cout << string(RewriteBuf->begin(), RewriteBuf->end());
-
-  for (auto &item : callGraph) {
-    auto& funcName = item.first;
-    for (auto& branch_id : funcDirectSmoothBranches[funcName])
-      funcTransitiveSmoothBranches[funcName].push_back(branch_id);
-
-    for (auto& callee : item.second)
-      for (auto& branch_id : funcDirectSmoothBranches[callee])
-        funcTransitiveSmoothBranches[funcName].push_back(branch_id);
-  }
-
-  string inFname = op->getSourcePathList()[0];
-  string smoothBranchesFname = inFname.substr(0, inFname.length() - strlen("normalized.cpp")) + "smoothBranches.bin";
-  serialize(funcTransitiveSmoothBranches, smoothBranchesFname);
 
   return r;
 }

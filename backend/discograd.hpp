@@ -19,6 +19,8 @@
  *    SOFTWARE.
  */
 
+#pragma once
+
 #include <array>
 #include <iostream>
 #include <limits>
@@ -45,6 +47,7 @@ extern const int num_inputs;
 #endif
 
 #include "ad/fw_ad.hpp"
+#include "ad/avec.hpp"
 
 typedef array<adouble, num_inputs> aparams;
 
@@ -55,7 +58,10 @@ class DiscoGrad;
 template<int num_inputs>
 class DiscoGradProgram {
 public:
-  virtual adouble run(DiscoGrad<num_inputs> &_discograd, aparams &p) = 0;
+  DiscoGrad<num_inputs> &_discograd;
+  DiscoGradProgram(DiscoGrad<num_inputs> &_discograd) : _discograd(_discograd) { };
+
+  virtual adouble run(aparams &p) = 0;
 };
 
 /** Wrapper for a smoothly interpreted function that takes only the parameters read from stdin. */
@@ -64,11 +70,10 @@ class DiscoGradFunc : public DiscoGradProgram<num_inputs> {
 private:
   adouble (*func)(DiscoGrad<num_inputs>&, aparams&);
 public:
-  DiscoGradFunc(adouble (*func)(DiscoGrad<num_inputs>&, aparams&)) {
-    this->func = func;
-  }
-  adouble run(DiscoGrad<num_inputs> &_discograd, aparams &p) {
-    return func(_discograd, p);
+  DiscoGradFunc(DiscoGrad<num_inputs> &_discograd, adouble (*func)(DiscoGrad<num_inputs>&, aparams&)) :
+                DiscoGradProgram<num_inputs>(_discograd), func(func) {}
+  adouble run(aparams &p) {
+    return func(this->_discograd, p);
   }
 };
 
@@ -77,9 +82,9 @@ template<int num_inputs>
 class DiscoGradBase {
 protected: 
   bool debug;
-  int num_param_combs = 1;
-  int num_replications = 1;
-  int num_samples = 1;
+  uint64_t num_param_combs = 1;
+  uint64_t num_replications = 1;
+  uint64_t num_samples = 1;
   int seed_arg = 1;
   int seed;
 
@@ -92,7 +97,6 @@ protected:
   bool rs_mode = false;
   unsigned current_seed; /**< The seed for the current run of the program. */
   adouble exp_val = 0.0;     /**< The current expected value of the smoothed program. */
-  double lowest_sample_val = DBL_MAX;
   array<adouble, num_inputs> parameters;
   uint64_t start_time_us; /**< Start time of estimation. */
   uint64_t estimate_duration_us; /**< Duration of estimation. */
@@ -100,7 +104,6 @@ protected:
   void print_results() const {
     printf("estimation_duration: %ldus, %.2fs\n", estimate_duration_us, estimate_duration_us * 1e-6);
     printf("expectation: %.10g\n", expectation());
-    //printf("lowest: %.10g\n", lowest_val());
 #if not defined CRISP or defined ENABLE_AD
     for (int dim = 0; dim < num_inputs; ++dim)
       printf("derivative: %.10g\n", derivative(dim));
@@ -171,13 +174,13 @@ public:
 
     if (debug) {
       printf("variance: %.10g\n", stddev * stddev);
-      printf("num_replications: %d\n", num_replications);
-      printf("num_samples: %d\n", num_samples);
+      printf("num_replications: %lu\n", num_replications);
+      printf("num_samples: %lu\n", num_samples);
     }
   }
 
   void estimate(DiscoGradProgram<num_inputs> &program) {
-    for (int param_comb = 0; param_comb < num_param_combs; param_comb++) {
+    for (uint64_t param_comb = 0; param_comb < num_param_combs; param_comb++) {
       this->seed = this->seed_arg;
       if (this->seed == -1)
         this->seed = random_device()();
@@ -192,7 +195,7 @@ public:
           exit(1);
         }
         parameters[dim] = p;
-        parameters[dim].set_initial_tang(dim, 1);
+        parameters[dim].set_tang(dim, 1);
       }
 
       this->exp_val = 0.0;
@@ -202,13 +205,13 @@ public:
       stop_timer();
       print_results();
     }
+    exit(0); // leave cleanup to OS, mostly not to pollute profiling results
   }
 
   /** Execute the DiscoGradProgram with a smoothed execution and estimate or calculate the gradient. */
   virtual void estimate_(DiscoGradProgram<num_inputs> &program) = 0;
   /** The expected program output of the most recent estimation. */
   double expectation() const { return exp_val.get_val(); }
-  double lowest_val() const { return lowest_sample_val; }
   /** The (expected) program derivative for input dimension dim of the most recent estimation. */
   virtual double derivative(int dim) const { return exp_val.get_tang(dim); }
 };
@@ -218,6 +221,8 @@ public:
   #include "polyak_gradient_oracle/discograd.hpp"
 #elif defined REINFORCE
   #include "reinforce/discograd.hpp"
+#elif defined RLOO
+  #include "rloo/discograd.hpp"
 #elif defined DGO
   #include "discograd_gradient_oracle/discograd.hpp"
 #elif defined CRISP

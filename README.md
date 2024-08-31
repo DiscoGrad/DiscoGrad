@@ -14,7 +14,6 @@ The repository includes a number of sample applications from domains such as tra
 
 [Illustration of DiscoGrad](https://github.com/philipp-andelfinger/DiscoGrad/assets/59713878/4fc691f2-d760-441a-8155-0dc266d5853a)
 
-
 ## 💾 Installation
 
 Tested on `Ubuntu 22.04.4 LTS`, `Arch Linux` and `Fedora 38 Workstation`
@@ -58,7 +57,7 @@ You can run `./programs/hello_world/hello_world_{crisp,dgo,pgo,reinforce} -h` fo
 
 ## ❔Usage
 
-### Use of the DiscoGrad API
+### Usage of the DiscoGrad API
 
 The use of our API requires some boilerplate, as detailed below. Please refer to the `programs` folder for some example usages.
 
@@ -69,7 +68,7 @@ const int num_inputs = 1;
 ```
 2. Implement your entry function, by prepending `_DiscoGrad_` to the name and using the differentiable type `adouble` as return value. An object of the type `aparams` holds the program inputs. As in traditional AD libraries, the type `adouble` represents a double precision floating point variable. In addition to differentiating through adoubles, DiscoGrad allows branching on (functions of) adoubles and generates gradients that reflect the dependence of the branch taken on the condition.
 ```c++
-adouble _DiscoGrad_my_function(DiscoGrad& _dg, aparams p) {
+adouble _DiscoGrad_my_function(DiscoGrad<num_inputs>& _discograd, aparams& p) {
   adouble inputs[num_inputs];
   for (int i = 0; i < num_inputs; i++)
     inputs[i] = p[i];
@@ -78,15 +77,42 @@ adouble _DiscoGrad_my_function(DiscoGrad& _dg, aparams p) {
   return output;
 }
 ```
-3. In the main function, create an instance of the `DiscoGrad` class and a wrapper for your smooth function. Call `.estimate(func)` on the DiscoGrad instance to invoke the backend-specific gradient estimator.
+3. In the main function, interface with the DiscoGrad API by creating an instance of the `DiscoGrad` class and a wrapper for your smooth function. Call `.estimate(func)` on the DiscoGrad instance to invoke the backend-specific gradient estimator.
 ```c++
 int main(int argc, char** argv) {
   // interface with backend and provide the CLI arguments, such as the variance
   DiscoGrad<num_inputs> dg(argc, argv);
   // create a wrapper for the smooth function
-  DiscoGradFunc<num_inputs> func(_DiscoGrad_my_function);  
+  DiscoGradFunc<num_inputs> func(dg, _DiscoGrad_my_function);  
   // call the estimate function of the backend (chosen during compilation)
   dg.estimate(func);
+}
+```
+
+### Including Additional Variables in Smooth Functions
+
+To include additional variables besides the inputs (`aparams`) and to avoid having to pass the DiscoGrad instance between smooth functions, you need to wrap your function in a class that implements the `DiscoGradProgram` interface. The only requirement for this class is that it implements the `adouble run(DiscoGrad&, aparams&)` method. See `programs/ac` for a simple and `programs/epidemics` for a more elaborate example. Here is an example that replaces steps 2 and 3 above: 
+```c++
+class MyProgram : public DiscoGradProgram<num_inputs> {
+public:
+  // a parameter wrt. which we do not want to differentiate
+  double non_input_parameter;
+  MyProgram(DiscoGrad<num_inputs>& _discograd, double non_input_parameter) : DiscoGradProgram<num_inputs>(_discograd), non_input_parameter(non_input_parameter) {}
+
+  adouble _DiscoGrad_f(aparams &p, double non_input_parameter) {
+    // your code here
+  }
+
+  // implement the DiscoGradProgram interface, so that dg.estimate knows what to do
+  adouble run(aparams &p) {
+    return _DiscoGrad_f(p, non_input_parameter);
+  }
+};
+
+int main(int argc, char** argv) {
+  DiscoGrad<num_inputs> dg(argc, argv);
+  MyProgram prog(dg, 0.42); 
+  dg.estimate(prog);
 }
 ```
 
@@ -100,7 +126,7 @@ discograd$ ./smooth_compile programs/my_program/my_program.cpp
 
 Custom compiler or linker flags can be set in the ``smooth_compile`` script.
 
-You can find a list of backends below.
+You can find a list of backends below. By default, executables for all backends are generated. To restrict compilation to a subset of backends, add the flag ``-Cbackend1,backend2,...``.
 
 ### Executing a Smoothed Program
 
@@ -119,8 +145,9 @@ This is an overview of all the current backends. More detailed explanations can 
 | -----------------|--------------------------------------------------------------------------------
 | crisp            | The original program with optional input perturbations and AD
 | dgo              | DiscoGrad Gradient Oracle, DiscoGrad's own gradient estimator based on automatic differentiation and Monte Carlo sampling.     
-| pgo              | Polyak's Gradient-Free Oracle presented by Polyak and further analysed by Nesterov et al. 
+| pgo              | Polyak's Gradient-Free Oracle presented by Polyak and further analysed by Nesterov et. al. 
 | reinforce        | Application of REINFORCE to programs with artificially introduced Gaussian randomness.
+| rloo             | REINFORCE Leave-One-Out estimator as described by Kool et al.
 
 Additionally, an implementation of gradient estimation via Chaudhuri and Solar-Lezama's method of Smooth Interpretation can be found in the branch 'discograd_ieee_access'.
 
@@ -130,6 +157,7 @@ Note: When all branches occur directly on discrete random variables drawn from d
 - Chaudhuri, Swarat, and Armando Solar-Lezama. "Smooth interpretation." ACM Sigplan Notices 45.6 (2010): 279-291.
 - Boris T Polyak. "Introduction to optimization." 1987. (Chapter 3.4.2)
 - Nesterov, Yurii, and Vladimir Spokoiny. "Random gradient-free minimization of convex functions." Foundations of Computational Mathematics 17 (2017): 527-566.
+- Wouter Kool, Herke van Hoof, and Max Welling. Buy 4 reinforce samples, get a baseline for free! DeepRLStructPred@ICLR, 2019.
 
 ## ⚖️ License
 
@@ -159,13 +187,12 @@ The DiscoGrad tool includes some parts from third parties, which are licensed as
 An alternative derivation of the DGO estimator can be found in:
 
 ```
-@misc{andelfinger2024automatic,
-      title={Automatic Gradient Estimation for Calibrating Crowd Models with Discrete Decision Making}, 
-      author={Philipp Andelfinger and Justin N. Kreikemeyer},
-      year={2024},
-      eprint={2404.04678},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+@inproceedings{andelfinger2024automatic,
+  booktitle = {24th International Conference on Computational Science (ICCS 2024)},
+  title = {{Automatic Gradient Estimation for Calibrating Crowd Models with Discrete Decision Making}},
+  author = {Philipp Andelfinger and Justin N. Kreikemeyer},
+  pages = {227--241},
+  year = {2024}
 }
 ```
 

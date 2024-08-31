@@ -684,7 +684,7 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
 int main(int argc, char **argv)
 {
   DiscoGrad<num_inputs> dg(argc, argv, false);
-  DiscoGradFunc<num_inputs> func(_DiscoGrad_crowd);
+  DiscoGradFunc<num_inputs> func(dg, _DiscoGrad_crowd);
 
   dg.estimate(func);
 

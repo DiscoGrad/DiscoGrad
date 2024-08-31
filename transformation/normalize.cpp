@@ -85,14 +85,38 @@ public:
 
       Stmt *Then = If->getThen();
 
+      bool addedThenBraces = false;
+
       if (!isa<CompoundStmt>(Then)) {
         rewriter.InsertText(Then->getBeginLoc(), "{");
         rewriter.InsertText(GET_LOC_END(Then), "}");
+        addedThenBraces = true;
       }
 
       Stmt *Else = If->getElse();
       if (!Else) {
-        rewriter.InsertText(isa<CompoundStmt>(Then) ? GET_LOC_BEFORE_END(Then) : GET_LOC_END(Then), "else { }");
+        SourceRange range({GET_LOC_BEFORE_END(Then), GET_LOC_END(Then)});
+        auto rewStr = rewriter.getRewrittenText(range);
+        if (print_debug)
+          cerr << "before: |" << rewStr << "|" << endl;
+
+        int insPos = rewStr.length();
+        int macroPos = rewStr.find("#");
+        if (macroPos != string::npos)
+          insPos = macroPos;
+
+        int bracePos = rewStr.find("}");
+        if (bracePos != string::npos)
+          insPos = addedThenBraces ? bracePos + 1 : bracePos;
+
+        assert(macroPos == string::npos || insPos <= macroPos);
+
+        if (print_debug)
+          cerr << "inserting at " << insPos << ", added braces: " << addedThenBraces << endl;
+        rewStr.insert(insPos, "else { }\n");
+        rewriter.ReplaceText(range, rewStr);
+        if (print_debug)
+          cerr << "after: |" << rewriter.getRewrittenText(range) << "|" << endl;
       } else if (!isa<CompoundStmt>(Else)) {
         rewriter.InsertText(Else->getBeginLoc(), "{");
         rewriter.InsertText(GET_LOC_END(Else), "}");

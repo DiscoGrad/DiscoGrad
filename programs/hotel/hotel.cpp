@@ -150,7 +150,7 @@ adouble _DiscoGrad_f(DiscoGrad<num_inputs> &_discograd, aparams &in) {
 int main(int argc, char **argv) {
 
   DiscoGrad<num_inputs> dg(argc, argv);
-  DiscoGradFunc<num_inputs> func(_DiscoGrad_f);
+  DiscoGradFunc<num_inputs> func(dg, _DiscoGrad_f);
   dg.estimate(func);
 
   return 0;

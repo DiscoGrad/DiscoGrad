@@ -31,7 +31,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include "../globals.hpp"
 
 /// @file kde.h
 /// @brief Kernel Density Estimation for C++

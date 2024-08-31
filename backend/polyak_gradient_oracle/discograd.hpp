@@ -47,7 +47,7 @@ public:
     assert(this->stddev > 0);
 
     default_random_engine reference_seed_gen(this->seed + 1);
-    for (int rep = 0; rep < this->num_replications; ++rep) {
+    for (uint64_t rep = 0; rep < this->num_replications; ++rep) {
 
       if (this->rs_mode) // single reference, on or more _unrelated_ reps (here: equal to samples)
         this->current_seed = this->seed_dist(reference_seed_gen);
@@ -56,11 +56,11 @@ public:
 
       this->rng.seed(this->current_seed);
 
-      double crisp_ref = program.run(*this, this->parameters).get_val(); // f(x)
+      double crisp_ref = program.run(this->parameters).get_val(); // f(x)
 
       array<double, num_inputs> perturbation = {};
 
-      for (int sample = 0; sample < this->num_samples; sample++) {
+      for (uint64_t sample = 0; sample < this->num_samples; sample++) {
 
         if (this->rs_mode)
           this->current_seed = this->seed_dist(this->rep_seed_gen);
@@ -76,8 +76,7 @@ public:
         }
         // execute program on perturbed parameters
         this->rng.seed(this->current_seed);
-        double perturbed = program.run(*this, pm_perturbed).get_val(); // f(x+u*stddev)
-        this->lowest_sample_val = min(this->lowest_sample_val, perturbed);
+        double perturbed = program.run(pm_perturbed).get_val(); // f(x+u*stddev)
 
         exp += perturbed;
         for (int dim = 0; dim < num_inputs; ++dim) {

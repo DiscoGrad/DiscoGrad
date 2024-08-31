@@ -27,7 +27,7 @@ template<int num_inputs>
 class DiscoGrad : public DiscoGradBase<num_inputs> {
 
 private:
-  array<double, num_inputs> perturbations = {};
+  vector<array<double, num_inputs>> perturbations;
   double exp = 0.0;
   double deriv[num_inputs] = { 0.0 };
 
@@ -36,35 +36,44 @@ public:
 
   double deriv_log_norm_pdf(double x, double mu) { return (x - mu) / this->variance; }
 
-  /** 
-   * REINFORCE as proposed in Williams, R.J. Simple statistical gradient-following algorithms for connectionist reinforcement learning. Mach Learn 8, 229–256
-   * https://doi.org/10.1007/BF00992696
-   */
   void estimate_(DiscoGradProgram<num_inputs> &program) {
+    vector<double> perturbed;
     for (uint64_t rep = 0; rep < this->num_replications; ++rep) {
       this->current_seed = this->seed_dist(this->rep_seed_gen);
       this->rng.seed(this->current_seed);
       for (uint64_t sample = 0; sample < this->num_samples; ++sample) {
+        array<double, num_inputs> perturbation;
+
         array<adouble, num_inputs> pm_perturbed;
         for (int dim = 0; dim < num_inputs; ++dim) {
           if (this->perturbation_dim == -1 || this->perturbation_dim == dim)
-            perturbations[dim] = this->normal_dist(this->sampling_rng);
+            perturbation[dim] = this->normal_dist(this->sampling_rng);
 
-          pm_perturbed[dim] = this->parameters[dim] + perturbations[dim];
+          pm_perturbed[dim] = this->parameters[dim] + perturbation[dim];
         }
+
+        perturbations.push_back(perturbation);
+
         // execute program on perturbed parameters
         this->rng.seed(this->current_seed);
-        double perturbed = program.run(pm_perturbed).get_val(); // f(x+u*stddev)
-        exp += perturbed;
-        for (int dim = 0; dim < num_inputs; ++dim)
-          deriv[dim] += perturbed * deriv_log_norm_pdf(pm_perturbed[dim].val, pm_perturbed[dim].val - perturbations[dim]) / this->num_samples;
+        perturbed.push_back(program.run(pm_perturbed).get_val()); // f(x+u*stddev)
+        exp += perturbed.back();
       }
     }
-    
-    // statistics over replications
-    this->exp_val = (exp / this->num_samples) / this->num_replications;
+
+    int total_runs = this->num_samples * this->num_replications;
+    this->exp_val = exp / total_runs;
+
+    for (int s = 0; s < total_runs; s++) {
+      for (int dim = 0; dim < num_inputs; ++dim) {
+        double fs = perturbed[s];
+        double b = (exp - fs) / (total_runs - 1);
+        deriv[dim] += (fs - b) * deriv_log_norm_pdf(perturbations[s][dim], 0);
+      }
+    }
+
     for (int dim = 0; dim < num_inputs; ++dim)
-      deriv[dim] /= this->num_replications;
+      deriv[dim] /= total_runs;
   }
 
   double derivative(int dim) const { return deriv[dim]; }

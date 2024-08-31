@@ -90,8 +90,8 @@ const double min_w = 0.5;
 const bool print_trace = PRINT_TRACE;
 
 typedef int aid_t;
-typedef vec2<xdouble> dbl2;
 typedef vec2<int> int2;
+typedef avec<2, num_inputs> dbl2;
 
 const double v_desired_mean = 1.29;
 const double v_desired_stddev = 0.1;
@@ -220,12 +220,12 @@ struct Agent {
   xdouble waypoint_dist() {
     dbl2& wp = waypoint;
      if (wp[0] == -1)
-       return abs(VAL(p[1]) - VAL(wp[1]));
+       return abs(VAL(p[1]) - VAL(wp)[1]);
      if (wp[1] == -1)
-       return abs(VAL(p[0]) - VAL(wp[0]));
+       return abs(VAL(p[0]) - VAL(wp)[0]);
 
      dbl2 dist = p - wp;
-     return norm(dist);
+     return dist.norm();
    }
 
   bool operator==(Agent& other) { return aid == other.aid; }
@@ -334,7 +334,7 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
 
       dbl2 t_dist = wp - ego.p;
 
-      xdouble t_dist_norm = norm(t_dist);
+      xdouble t_dist_norm = t_dist.norm();
       dbl2 e = t_dist / t_dist_norm;
       f_internal = ego.v_desired * e - ego.v;
 
@@ -347,14 +347,14 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
         if (other != ego && ego.is_neighbor(other)) {
           o_dist = other.p - ego.p;
 
-          o_dist_norm = norm(o_dist);
+          o_dist_norm = o_dist.norm();
           o_dir = o_dist / o_dist_norm;
 
           v_diff = ego.v - other.v;
 
           int_v = lambda * v_diff + o_dir;
 
-          int_norm = norm(int_v);
+          int_norm = int_v.norm();
           int_dir = int_v / int_norm;
 
           xdouble angle_a = atan2(int_dir[1], int_dir[0]);
@@ -420,9 +420,9 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
       dbl2 b_a_dist0 = o0.second - o0.first, b_a_dist1 = o1.second - o1.first;
       dbl2 p_a_dist0 = p - o0.first, p_a_dist1 = p - o1.first;
 
-      xdouble lambda0 = dot(p_a_dist0, b_a_dist0) / (b_a_dist0[0] * b_a_dist0[0] + b_a_dist0[1] * b_a_dist0[1]);
-      xdouble lambda1 = dot(p_a_dist1, b_a_dist1) / (b_a_dist1[0] * b_a_dist1[0] + b_a_dist1[1] * b_a_dist1[1]);
-      
+      xdouble lambda0 = p_a_dist0.dot(b_a_dist0) / b_a_dist0.squared_norm();
+      xdouble lambda1 = p_a_dist1.dot(b_a_dist1) / b_a_dist1.squared_norm();
+     
       dbl2 closest_point0 = o0.first + lambda0 * b_a_dist0;
       double lambda0_val = VAL(lambda0);
       double lambda1_val = VAL(lambda1);
@@ -441,8 +441,8 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
       dbl2 dist0 = p - closest_point0;
       dbl2 dist1 = p - closest_point1;
 
-      xdouble dist_norm0 = norm(dist0);
-      xdouble dist_norm1 = norm(dist1);
+      xdouble dist_norm0 = dist0.norm();
+      xdouble dist_norm1 = dist1.norm();
 
 #if DGO_IGNORE_SF_BRANCHES == false
       //  note: if the obstacle is level with one of the axes and the closest point is not one of the end points,
@@ -484,11 +484,11 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
       // as a crisp branch, however, it causes bias when the path beyond the wp affects the return value
       double wp_dist = VAL(ego.waypoint_dist());
       if (wp_dist < waypoint_tol) {
-        VAL(wp[0]) = scenario_width * 100;
-        VAL(wp[1]) = VAL(ego.p[1]);
+        VAL(wp)[0] = scenario_width * 100;
+        VAL(wp)[1] = VAL(ego.p)[1];
       }
 
-      int2 new_cell = { (int)(VAL(ego.p[0]) / cell_width), (int)(VAL(ego.p[1]) / cell_width) };
+      int2 new_cell = { (int)(VAL(ego.p)[0] / cell_width), (int)(VAL(ego.p)[1] / cell_width) };
 
       ego.cell = new_cell;
     }
@@ -496,7 +496,7 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
     if (print_trace) {
       fprintf(stderr, "%.6f", t_sim);
       for (auto &ego : agents)
-        fprintf(stderr, ",%d,%.6f,%.6f", true, VAL(ego.p[0]), VAL(ego.p[1]));
+        fprintf(stderr, ",%d,%.6f,%.6f", true, VAL(ego.p)[0], VAL(ego.p)[1]);
       fprintf(stderr, "\n");
     }
   }
@@ -537,7 +537,7 @@ adouble _DiscoGrad_crowd(DiscoGrad<num_inputs> &_discograd, aparams &p)
 int main(int argc, char **argv)
 {
   DiscoGrad<num_inputs> dg(argc, argv, false);
-  DiscoGradFunc<num_inputs> func(_DiscoGrad_crowd);
+  DiscoGradFunc<num_inputs> func(dg, _DiscoGrad_crowd);
 
   dg.estimate(func);
 

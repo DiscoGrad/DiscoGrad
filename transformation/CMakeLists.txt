@@ -16,7 +16,7 @@ message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
 add_compile_options(-Wno-deprecated-enum-enum-conversion)
 
 # Add targets and link LLVM and clang libraries
-set(TARGET_LIST normalize;smooth_dgo)
+set(TARGET_LIST normalize;smooth_dgo;insert_func_incr)
 foreach (item ${TARGET_LIST})
     add_executable(${item} ${item}.cpp)
     target_link_libraries(${item} ${LLVM_LIBRARIES})
