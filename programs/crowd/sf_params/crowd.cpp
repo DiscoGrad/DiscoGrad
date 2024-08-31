@@ -257,7 +257,7 @@ void spawn_agent(DiscoGrad<num_inputs>& _discograd) {
 
   ego.aid = num_active_agents;
   
-  ego.p = {u_dist(_discograd.rng) * 0.3 * scenario_width, (0.15 + u_dist(_discograd.rng) * 0.5) * scenario_width};
+  ego.p = {-u_dist(_discograd.rng) * 0.3 * scenario_width, (0.05 + u_dist(_discograd.rng) * 0.9) * scenario_width};
 
   ego.cell = { (int)(VAL(ego.p[0]) / cell_width), (int)(VAL(ego.p[1]) / cell_width) };
   ego.waypoint = wp_alternatives[0][0];
