@@ -128,6 +128,8 @@ Custom compiler or linker flags can be set in the ``smooth_compile`` script.
 
 You can find a list of backends below. By default, executables for all backends are generated. To restrict compilation to a subset of backends, add the flag ``-Cbackend1,backend2,...``.
 
+To define preprocessor constants at compile time, you can use the `-D` flag, e.g., `-DNUM_REPS=10` to set the constant named `NUM_REPS` to 10.
+
 ### Executing a Smoothed Program
 
 To run a smoothed program and compute its gradient, simply invoke the binary with the desired CLI arguments, for example

@@ -72,15 +72,6 @@ smooth_flags=$(preface --extra-arg= $cpp_flags -DNO_AD -DCRISP $libtorch_flags -
 insert_func_incr_flags=$(preface --extra-arg= $cpp_flags -DAD -DDGO $libtorch_flags -Wno-unused-command-line-argument)
 CPATH=$CPATH:$(clang++ -v 2>&1| grep 'Selected GCC installation' | awk '{print $NF}')/include
 
-# num_inputs needs to be visible to both the main cpp file and libabl.c
-# we create a header for this purpose here for simplicity
-if [[ $(head -n1 $src_fname) == "const int num_inputs ="* ]]; then
-  inputs_path="$(dirname $src_fname)/inputs.hpp"
-  echo "#pragma once" > $inputs_path
-  head -n1 $src_fname >> $inputs_path
-  sed -i '1,2d' $src_fname
-fi
-
 # crisp with optional sampling, no automatic differentiation
 crisp() {
   echo "Compiling crisp version as ${prefix}${program_user_flags_suffix}_crisp..."

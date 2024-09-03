@@ -6,6 +6,7 @@
 transformation/*       
 # except cpp and sh files, as well as this file
 !transformation/*.cpp  
+!transformation/*.hpp  
 !transformation/*.sh
 !transformation/*.gitignore
 !transformation/*CMakeLists.txt
@@ -15,13 +16,17 @@ programs/*/*_dgsi
 programs/*/*_dgsi_noad
 programs/*/*_dgsi.cpp
 programs/*/*_normalized_dgsi.cpp
-programs/*/*_dgo
-programs/*/*_dgo_noad
-programs/*/*_dgo.cpp
-programs/*/*_crisp
-programs/*/*_crisp_ad
-programs/*/*_pgo
-programs/*/*_reinforce
+programs/**/*_normalized.cpp
+programs/**/*_smoothBranches.bin
+programs/**/*_smoothed.cpp
+programs/**/*_dgo
+programs/**/*_dgo_noad
+programs/**/*_dgo.cpp
+programs/**/*_crisp
+programs/**/*_crisp_ad
+programs/**/*_pgo
+programs/**/*_reinforce
+programs/**/*_rloo
 
 # Publication
 publication/figures
