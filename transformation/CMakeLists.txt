@@ -9,6 +9,9 @@ find_package(LLVM REQUIRED CONFIG)
 execute_process(COMMAND llvm-config --libs all OUTPUT_VARIABLE LLVM_LIBRARIES COMMAND_ERROR_IS_FATAL ANY)
 string(STRIP ${LLVM_LIBRARIES} LLVM_LIBRARIES)
 include_directories(${LLVM_INCLUDE_DIRS})
+execute_process(COMMAND llvm-config --libdir OUTPUT_VARIABLE LLVM_LIB_DIR COMMAND_ERROR_IS_FATAL ANY)
+string(STRIP ${LLVM_LIB_DIR} LLVM_LIB_DIR)
+link_directories(${LLVM_LIB_DIR})
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "LLVM libraries: ${LLVM_LIBRARIES}")
@@ -27,6 +30,7 @@ foreach (item ${TARGET_LIST})
       target_link_libraries(${item} clang-cpp)
     else()
       target_link_libraries(${item}
+              clang-cpp
               clangFrontend
               clangSerialization
               clangDriver

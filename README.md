@@ -16,11 +16,11 @@ The repository includes a number of sample applications from domains such as tra
 
 ## 💾 Installation
 
-Tested on `Ubuntu 22.04.4 LTS`, `Arch Linux` and `Fedora 38 Workstation`
+Tested on `Ubuntu 24.04.1 LTS`, `Ubuntu 22.04.4 LTS`, `Arch Linux` and `Fedora 38 Workstation`
 
 To compile the transformation code, you need the following packages (or their analogues provided by your Linux distribution):
-- `clang`, `clang-devel` (version 13 or higher)
-- `llvm`, `llvm-devel` (version 13 or higher)
+- `clang`, `libclang-dev`, `libclang-cpp-dev` (version 13 or higher)
+- `llvm`, `llvm-dev` (version 13 or higher)
 - `cmake`
 
 ```
