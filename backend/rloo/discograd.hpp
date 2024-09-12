@@ -28,7 +28,7 @@ class DiscoGrad : public DiscoGradBase<num_inputs> {
 
 private:
   vector<array<double, num_inputs>> perturbations;
-  double exp = 0.0;
+  double expect = 0.0;
   double deriv[num_inputs] = { 0.0 };
 
 public:
@@ -38,10 +38,20 @@ public:
 
   void estimate_(DiscoGradProgram<num_inputs> &program) {
     vector<double> perturbed;
+    default_random_engine reference_seed_gen(this->seed + 1);
     for (uint64_t rep = 0; rep < this->num_replications; ++rep) {
-      this->current_seed = this->seed_dist(this->rep_seed_gen);
+
+      if (this->rs_mode) // single reference, one or more _unrelated_ reps (here: equal to samples)
+        this->current_seed = this->seed_dist(reference_seed_gen);
+      else // single reference per rep, one or more samples with the _same_ rep seed
+        this->current_seed = this->seed_dist(this->rep_seed_gen);
+
       this->rng.seed(this->current_seed);
+
       for (uint64_t sample = 0; sample < this->num_samples; ++sample) {
+        if (this->rs_mode)
+          this->current_seed = this->seed_dist(this->rep_seed_gen);
+
         array<double, num_inputs> perturbation;
 
         array<adouble, num_inputs> pm_perturbed;
@@ -57,17 +67,17 @@ public:
         // execute program on perturbed parameters
         this->rng.seed(this->current_seed);
         perturbed.push_back(program.run(pm_perturbed).get_val()); // f(x+u*stddev)
-        exp += perturbed.back();
+        expect += perturbed.back();
       }
     }
 
     int total_runs = this->num_samples * this->num_replications;
-    this->exp_val = exp / total_runs;
+    this->exp_val = expect / total_runs;
 
     for (int s = 0; s < total_runs; s++) {
       for (int dim = 0; dim < num_inputs; ++dim) {
         double fs = perturbed[s];
-        double b = (exp - fs) / (total_runs - 1);
+        double b = (expect - fs) / (total_runs - 1);
         deriv[dim] += (fs - b) * deriv_log_norm_pdf(perturbations[s][dim], 0);
       }
     }

@@ -49,7 +49,7 @@ public:
     default_random_engine reference_seed_gen(this->seed + 1);
     for (uint64_t rep = 0; rep < this->num_replications; ++rep) {
 
-      if (this->rs_mode) // single reference, on or more _unrelated_ reps (here: equal to samples)
+      if (this->rs_mode) // single reference, one or more _unrelated_ reps (here: equal to samples)
         this->current_seed = this->seed_dist(reference_seed_gen);
       else // single reference per rep, one or more samples with the _same_ rep seed
         this->current_seed = this->seed_dist(this->rep_seed_gen);
@@ -64,7 +64,7 @@ public:
 
         if (this->rs_mode)
           this->current_seed = this->seed_dist(this->rep_seed_gen);
-
+ 
         normal_distribution<double> normal_dist(0, 1);
         array<adouble, num_inputs> pm_perturbed = this->parameters;
         for (int dim = 0; dim < num_inputs; ++dim)
