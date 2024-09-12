@@ -238,8 +238,8 @@ public:
     if (only_one_tang_dim ||                                                   \
         (has_sparse_tang() && other.tang_dim == tang_dim)) {                   \
       int i = has_sparse_tang() ? tang_dim : other.tang_dim;                   \
+      r.tang[i] = TANG_EXPR_A_A;                                               \
       r.tang_dim = i;                                                          \
-      r.tang[r.tang_dim] = TANG_EXPR_A_A;                                      \
       return r;                                                                \
     }                                                                          \
     r.init_full_tang(true);                                                    \
@@ -256,8 +256,8 @@ public:
                                                                                \
     if (has_sparse_tang()) {                                                   \
       int i = tang_dim;                                                        \
+      r.tang[i] = TANG_EXPR_A_D;                                               \
       r.tang_dim = tang_dim;                                                   \
-      r.tang[r.tang_dim] = TANG_EXPR_A_D;                                      \
       return r;                                                                \
     }                                                                          \
     r.init_full_tang(true);                                                    \
@@ -280,8 +280,8 @@ public:
     if (only_one_tang_dim ||                                                   \
         (has_sparse_tang() && other.tang_dim == tang_dim)) {                   \
       int i = has_sparse_tang() ? tang_dim : other.tang_dim;                   \
+      r.tang[i] = TANG_EXPR_A_A;                                      \
       r.tang_dim = i;                                                          \
-      r.tang[r.tang_dim] = TANG_EXPR_A_A;                                      \
       val ASSIGN_OP other.val;                                                 \
       return;                                                                  \
     }                                                                          \
@@ -299,8 +299,8 @@ public:
     fw_adouble &r = *this;                                                     \
     if (has_sparse_tang()) {                                                   \
       int i = tang_dim;                                                        \
+      r.tang[i] = TANG_EXPR_A_D;                                      \
       r.tang_dim = tang_dim;                                                   \
-      r.tang[r.tang_dim] = TANG_EXPR_A_D;                                      \
     }                                                                          \
     if (has_full_tang())                                                       \
       ITER_TANG_EXPR_A_D;                                                      \
